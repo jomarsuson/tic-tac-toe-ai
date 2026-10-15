@@ -1,0 +1,165 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tic Tac Toe</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <div class="app-container">
+
+        <header class="app-header">
+            <button
+                id="historyMenuBtn"
+                class="history-menu-btn"
+                type="button"
+                aria-label="Open game history"
+                aria-expanded="false"
+            >
+                ☰
+            </button>
+
+            <div class="header-title">
+                <h1>TIC TAC TOE</h1>
+                <p>SMART MOVES. CLASSIC GAME.</p>
+            </div>
+        </header>
+
+        <main class="game-container">
+
+            <section class="mode-selector">
+                <p class="mode-title">CHOOSE GAME MODE</p>
+
+                <div class="mode-options">
+                    <button
+                        id="aiModeBtn"
+                        class="mode-btn active"
+                        type="button"
+                        aria-pressed="true"
+                    >
+                        <span class="mode-icon">🤖</span>
+                        <span class="mode-name">VS AI</span>
+                        <span class="mode-detail">Play against computer</span>
+                    </button>
+
+                    <button
+                        id="twoPlayerModeBtn"
+                        class="mode-btn"
+                        type="button"
+                        aria-pressed="false"
+                    >
+                        <span class="mode-icon">👥</span>
+                        <span class="mode-name">2 PLAYERS</span>
+                        <span class="mode-detail">Play with a friend</span>
+                    </button>
+                </div>
+            </section>
+
+            <section class="game-info">
+                <div class="player-label">
+                    YOU <strong>X</strong>
+                </div>
+
+                <div class="player-label" id="opponentLabel">
+                    AI <strong>O</strong>
+                </div>
+            </section>
+
+            <div class="board" role="group" aria-label="Tic Tac Toe board">
+                <button class="cell" type="button" aria-label="Cell 1"></button>
+                <button class="cell" type="button" aria-label="Cell 2"></button>
+                <button class="cell" type="button" aria-label="Cell 3"></button>
+
+                <button class="cell" type="button" aria-label="Cell 4"></button>
+                <button class="cell" type="button" aria-label="Cell 5"></button>
+                <button class="cell" type="button" aria-label="Cell 6"></button>
+
+                <button class="cell" type="button" aria-label="Cell 7"></button>
+                <button class="cell" type="button" aria-label="Cell 8"></button>
+                <button class="cell" type="button" aria-label="Cell 9"></button>
+            </div>
+
+            <div class="game-status">
+                <p id="status" role="status" aria-live="polite">
+                    Choose a mode, then press Start Game.
+                </p>
+            </div>
+
+            <div class="buttons">
+                <button id="startBtn" class="primary-btn" type="button">
+                    START GAME
+                </button>
+
+                <button id="restartBtn" class="secondary-btn" type="button">
+                    RESTART
+                </button>
+            </div>
+
+        </main>
+
+        <aside
+            id="historySidebar"
+            class="history-sidebar"
+            aria-hidden="true"
+        >
+            <div class="history-header">
+                <div>
+                    <h2>Game History</h2>
+                    <p>Your previous matches</p>
+                </div>
+
+                <button
+                    id="closeHistoryBtn"
+                    class="close-history-btn"
+                    type="button"
+                    aria-label="Close game history"
+                >
+                    &times;
+                </button>
+            </div>
+
+            <!-- SOUND EFFECTS CONTROL -->
+            <div class="sound-control">
+                <div class="sound-info">
+                    <strong>Sound Effects</strong>
+                    <small>Move, win, and draw sounds</small>
+                </div>
+
+                <button
+                    id="soundToggle"
+                    class="sound-toggle"
+                    type="button"
+                    aria-pressed="false"
+                    aria-label="Enable sound effects"
+                >
+                    <span id="soundIcon">🔇</span>
+                    <span id="soundText">OFF</span>
+                </button>
+            </div>
+
+            <button
+                id="refreshHistoryBtn"
+                type="button"
+            >
+                ↻ Refresh History
+            </button>
+
+            <div id="historyList" class="history-list">
+                <p>Loading game history...</p>
+            </div>
+        </aside>
+
+        <div class="sidebar-overlay"></div>
+
+        <footer class="app-footer">
+            <p>© 2026 TIC TAC TOE | PLAY SMART</p>
+        </footer>
+
+    </div>
+
+    <script src="game.js"></script>
+</body>
+</html>
