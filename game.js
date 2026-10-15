@@ -16,7 +16,6 @@ const opponentLabel = document.getElementById("opponentLabel");
 const boardElement = document.querySelector(".board");
 const gameContainer = document.querySelector(".game-container");
 
-// OPTIONAL SOUND EFFECTS
 const soundToggle = document.getElementById("soundToggle");
 const soundIcon = document.getElementById("soundIcon");
 const soundText = document.getElementById("soundText");
@@ -142,13 +141,16 @@ async function saveGameResult(result) {
     resultSaved = true;
 
     try {
-       const response = await fetch("https://tic-tac-toe-backend-1vkx.onrender.com/api/save-game", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json"
-            },
-            body: JSON.stringify({ result })
-        });
+        const response = await fetch(
+            "https://tic-tac-toe-backend-1vkx.onrender.com/api/save-game",
+            {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({ result })
+            }
+        );
 
         const data = await response.json();
 
@@ -259,13 +261,10 @@ function endGame() {
         let message;
 
         if (gameMode === "ai") {
-            result = winner === "X" ? "Player Wins" : "AI Wins";
+            result = winner === "X" ? "Player" : "AI";
             message = winner === "X" ? "You win!" : "AI wins!";
         } else {
-            result = winner === "X"
-                ? "Player X Wins"
-                : "Player O Wins";
-
+            result = winner === "X" ? "Player X" : "Player O";
             message = winner === "X"
                 ? "Player X wins!"
                 : "Player O wins!";
@@ -426,9 +425,9 @@ async function loadGameHistory() {
     historyList.innerHTML = "<p>Loading game history...</p>";
 
     try {
-        
-const response = await fetch("https://tic-tac-toe-backend-1vkx.onrender.com/api/game-history");
-
+        const response = await fetch(
+            "https://tic-tac-toe-backend-1vkx.onrender.com/api/game-history"
+        );
 
         if (!response.ok) {
             throw new Error("Failed to load game history");
