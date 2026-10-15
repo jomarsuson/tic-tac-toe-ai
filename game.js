@@ -142,7 +142,7 @@ async function saveGameResult(result) {
     resultSaved = true;
 
     try {
-        const response = await fetch("/api/save-game", {
+       const response = await fetch("https://tic-tac-toe-backend-1vkx.onrender.com/api/save-game", {
             method: "POST",
             headers: {
                 "Content-Type": "application/json"
@@ -426,7 +426,9 @@ async function loadGameHistory() {
     historyList.innerHTML = "<p>Loading game history...</p>";
 
     try {
-        const response = await fetch("/api/game-history");
+        
+const response = await fetch("https://tic-tac-toe-backend-1vkx.onrender.com/api/game-history");
+
 
         if (!response.ok) {
             throw new Error("Failed to load game history");
