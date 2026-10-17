@@ -5,267 +5,174 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="theme-color" content="#F6EFE6">
-    <title>Tic Tac Toe AI</title>
+    <title>Tic-Tac-Toe AI</title>
     <link rel="stylesheet" href="style.css">
+    <script src="game.js" defer></script>
 </head>
 <body>
-    <div class="app-container">
-
-        <header class="app-header">
-            <button id="historyMenuBtn" class="history-menu-btn"
-                type="button" aria-label="Open game history"
-                aria-expanded="false">☰</button>
-
-            <button id="settingsMenuBtn" class="settings-menu-btn"
-                type="button" aria-label="Customize appearance"
-                aria-controls="settingsPanel" aria-expanded="false">
-                ⚙
-            </button>
-
-            <div class="header-title">
-                <h1>TIC TAC TOE</h1>
-                <p>SMART MOVES. CLASSIC GAME.</p>
+    <header class="topbar">
+        <div class="brand">
+            <div class="brand-icon">X<span>O</span></div>
+            <div>
+                <h1>Tic-Tac-Toe AI</h1>
+                <p>HCI • WST • IM PROJECT</p>
             </div>
-        </header>
+        </div>
 
-        <main class="game-container">
-            <section class="mode-selector">
-                <p class="mode-title">CHOOSE GAME MODE</p>
-                <div class="mode-options">
-                    <button id="aiModeBtn" class="mode-btn active"
-                        type="button" aria-pressed="true">
-                        <span class="mode-icon">🤖</span>
-                        <span class="mode-name">VS AI</span>
-                        <span class="mode-detail">Play against computer</span>
-                    </button>
+        <div class="header-actions">
+            <button class="icon-btn" id="historyBtn" aria-label="Open game history">☷</button>
+            <button class="icon-btn" id="settingsBtn" aria-label="Customize appearance">⚙</button>
+        </div>
+    </header>
 
-                    <button id="twoPlayerModeBtn" class="mode-btn"
-                        type="button" aria-pressed="false">
-                        <span class="mode-icon">👥</span>
-                        <span class="mode-name">2 PLAYERS</span>
-                        <span class="mode-detail">Play with a friend</span>
-                    </button>
+    <main>
+        <section class="game-card">
+            <div class="game-heading">
+                <h2>Let's Play</h2>
+                <p>Make your move. Plan your strategy.</p>
+            </div>
+
+            <div class="mode-switch">
+                <button class="mode-btn active" data-mode="ai" aria-pressed="true">VS AI</button>
+                <button class="mode-btn" data-mode="two" aria-pressed="false">2 PLAYERS</button>
+            </div>
+
+            <div class="players">
+                <div class="player-box active-player" id="playerXBox">
+                    <div class="player-label" id="playerXLabel">YOU</div>
+                    <div class="player-symbol x">X</div>
                 </div>
-            </section>
-
-            <section class="game-info">
-                <div class="player-label">YOU <strong>X</strong></div>
-                <div class="player-label" id="opponentLabel">
-                    AI <strong>O</strong>
+                <div class="player-box" id="playerOBox">
+                    <div class="player-label" id="playerOLabel">AI</div>
+                    <div class="player-symbol o">O</div>
                 </div>
-            </section>
-
-            <div class="board" role="group" aria-label="Tic Tac Toe board">
-                <button class="cell" type="button" aria-label="Cell 1"></button>
-                <button class="cell" type="button" aria-label="Cell 2"></button>
-                <button class="cell" type="button" aria-label="Cell 3"></button>
-                <button class="cell" type="button" aria-label="Cell 4"></button>
-                <button class="cell" type="button" aria-label="Cell 5"></button>
-                <button class="cell" type="button" aria-label="Cell 6"></button>
-                <button class="cell" type="button" aria-label="Cell 7"></button>
-                <button class="cell" type="button" aria-label="Cell 8"></button>
-                <button class="cell" type="button" aria-label="Cell 9"></button>
             </div>
 
-            <div class="game-status">
-                <p id="status" role="status" aria-live="polite">
-                    Choose a mode, then press Start Game.
-                </p>
+            <div class="board" id="board" role="group" aria-label="Tic-Tac-Toe board">
+                <button class="cell" data-index="0" aria-label="Cell 1"></button>
+                <button class="cell" data-index="1" aria-label="Cell 2"></button>
+                <button class="cell" data-index="2" aria-label="Cell 3"></button>
+                <button class="cell" data-index="3" aria-label="Cell 4"></button>
+                <button class="cell" data-index="4" aria-label="Cell 5"></button>
+                <button class="cell" data-index="5" aria-label="Cell 6"></button>
+                <button class="cell" data-index="6" aria-label="Cell 7"></button>
+                <button class="cell" data-index="7" aria-label="Cell 8"></button>
+                <button class="cell" data-index="8" aria-label="Cell 9"></button>
             </div>
 
-            <div class="buttons">
-                <button id="startBtn" class="primary-btn" type="button">
-                    START GAME
-                </button>
-                <button id="restartBtn" class="secondary-btn" type="button">
-                    RESTART
-                </button>
-            </div>
-        </main>
-
-        <aside id="historySidebar" class="history-sidebar"
-            aria-hidden="true">
-            <div class="history-header">
-                <div>
-                    <h2>Game History</h2>
-                    <p>Your previous matches</p>
-                </div>
-                <button id="closeHistoryBtn" class="close-history-btn"
-                    type="button" aria-label="Close game history">
-                    &times;
-                </button>
+            <div class="status" id="status" role="status" aria-live="polite">
+                Click Start Game to begin.
             </div>
 
-            <div class="sound-control">
-                <div class="sound-info">
-                    <strong>Sound Effects</strong>
-                    <small>Move, win, and draw sounds</small>
-                </div>
-                <button id="soundToggle" class="sound-toggle"
-                    type="button" aria-pressed="false"
-                    aria-label="Enable sound effects">
-                    <span id="soundIcon">🔇</span>
-                    <span id="soundText">OFF</span>
-                </button>
+            <div class="game-actions">
+                <button class="action-btn primary" id="startBtn">Start Game</button>
+                <button class="action-btn" id="restartBtn">Restart Game</button>
             </div>
+        </section>
+    </main>
 
-            <button id="refreshHistoryBtn" type="button">
-                ↻ Refresh History
-            </button>
+    <footer>Tic-Tac-Toe AI · Play smart, have fun.</footer>
 
-            <div id="historyList" class="history-list">
-                <p>Loading game history...</p>
+    <!-- Settings drawer -->
+    <div class="drawer-overlay" id="settingsOverlay"></div>
+
+    <aside class="drawer" id="settingsDrawer" role="dialog"
+           aria-modal="true" aria-label="Customize appearance" aria-hidden="true">
+        <div class="drawer-header">
+            <div>
+                <h2>Customize Appearance</h2>
+                <p>Make the game your own.</p>
             </div>
-        </aside>
+            <button class="close-btn" id="closeSettings" aria-label="Close settings">×</button>
+        </div>
 
-        <div class="sidebar-overlay"></div>
-
-        <div id="settingsOverlay" class="settings-overlay"
-            aria-hidden="true"></div>
-
-        <aside id="settingsPanel" class="settings-panel"
-            role="dialog" aria-modal="true"
-            aria-labelledby="settingsTitle" aria-hidden="true">
-
-            <div class="settings-header">
-                <div>
-                    <p class="settings-eyebrow">PERSONALIZE YOUR GAME</p>
-                    <h2 id="settingsTitle">Appearance</h2>
-                    <p class="settings-description">
-                        Make the game feel like yours.
-                    </p>
-                </div>
-                <button id="closeSettingsBtn" class="close-settings-btn"
-                    type="button" aria-label="Close settings">
-                    &times;
-                </button>
-            </div>
-
+        <div class="drawer-content">
             <section class="settings-section">
                 <h3>Choose a theme</h3>
-                <p class="settings-help">Select a preset to preview its colors.</p>
-
-                <div class="theme-grid">
-                    <button class="theme-option selected"
-                        data-theme-preset="chocolate" type="button"
-                        aria-pressed="true">
-                        <span class="theme-swatches">
-                            <i style="background:#F6EFE6"></i>
-                            <i style="background:#C47A50"></i>
-                            <i style="background:#38251D"></i>
-                        </span>
-                        <span>Chocolate Cream</span>
-                    </button>
-
-                    <button class="theme-option"
-                        data-theme-preset="midnight" type="button"
-                        aria-pressed="false">
-                        <span class="theme-swatches">
-                            <i style="background:#191923"></i>
-                            <i style="background:#9285FF"></i>
-                            <i style="background:#FFFFFF"></i>
-                        </span>
-                        <span>Midnight Dark</span>
-                    </button>
-
-                    <button class="theme-option"
-                        data-theme-preset="ocean" type="button"
-                        aria-pressed="false">
-                        <span class="theme-swatches">
-                            <i style="background:#EAF4FF"></i>
-                            <i style="background:#2879C7"></i>
-                            <i style="background:#173653"></i>
-                        </span>
-                        <span>Ocean Blue</span>
-                    </button>
-
-                    <button class="theme-option"
-                        data-theme-preset="forest" type="button"
-                        aria-pressed="false">
-                        <span class="theme-swatches">
-                            <i style="background:#EDF5EC"></i>
-                            <i style="background:#3D8158"></i>
-                            <i style="background:#203A2A"></i>
-                        </span>
-                        <span>Forest Green</span>
-                    </button>
-
-                    <button class="theme-option"
-                        data-theme-preset="purple" type="button"
-                        aria-pressed="false">
-                        <span class="theme-swatches">
-                            <i style="background:#21152E"></i>
-                            <i style="background:#C66BFF"></i>
-                            <i style="background:#FFFFFF"></i>
-                        </span>
-                        <span>Purple Neon</span>
-                    </button>
-                </div>
+                <p>Select a design to preview it instantly.</p>
+                <div class="theme-grid" id="themeGrid"></div>
             </section>
 
             <section class="settings-section">
                 <h3>Custom colors</h3>
-                <p class="settings-help">
-                    Changes preview immediately. Save to keep them.
-                </p>
+                <p>Adjust individual colors and see the changes immediately.</p>
 
-                <label class="color-setting">
-                    <span>Background</span>
-                    <input id="backgroundColor" type="color"
-                        value="#F6EFE6">
-                </label>
-
-                <label class="color-setting">
-                    <span>Game board</span>
-                    <input id="boardColor" type="color"
-                        value="#F8F1E8">
-                </label>
-
-                <label class="color-setting">
-                    <span>Accent and buttons</span>
-                    <input id="accentColor" type="color"
-                        value="#C47A50">
-                </label>
-
-                <label class="color-setting">
-                    <span>Player X</span>
-                    <input id="xColor" type="color"
-                        value="#65432F">
-                </label>
-
-                <label class="color-setting">
-                    <span>Player O</span>
-                    <input id="oColor" type="color"
-                        value="#C47A50">
-                </label>
+                <div class="color-list">
+                    <div class="color-row">
+                        <label for="colorBg">Page background</label>
+                        <input id="colorBg" type="color" value="#F6EFE6">
+                    </div>
+                    <div class="color-row">
+                        <label for="colorBoard">Game board</label>
+                        <input id="colorBoard" type="color" value="#E9D8C5">
+                    </div>
+                    <div class="color-row">
+                        <label for="colorAccent">Accent and buttons</label>
+                        <input id="colorAccent" type="color" value="#C47A50">
+                    </div>
+                    <div class="color-row">
+                        <label for="colorX">X symbol</label>
+                        <input id="colorX" type="color" value="#65432F">
+                    </div>
+                    <div class="color-row">
+                        <label for="colorO">O symbol</label>
+                        <input id="colorO" type="color" value="#C47A50">
+                    </div>
+                </div>
             </section>
 
-            <div class="settings-preview">
-                <span>LIVE PREVIEW</span>
-                <div class="preview-board" aria-label="Color preview">
-                    <div class="preview-cell preview-x">X</div>
-                    <div class="preview-cell"></div>
-                    <div class="preview-cell preview-o">O</div>
-                    <div class="preview-cell"></div>
+            <section class="settings-section">
+                <h3>Live preview</h3>
+                <p>Your board updates as you customize it.</p>
+
+                <div class="preview">
+                    <div class="preview-title">YOUR GAME BOARD</div>
+                    <div class="preview-board" id="previewBoard">
+                        <div class="preview-cell" data-preview="X"></div>
+                        <div class="preview-cell" data-preview="O"></div>
+                        <div class="preview-cell"></div>
+                        <div class="preview-cell"></div>
+                        <div class="preview-cell" data-preview="X"></div>
+                        <div class="preview-cell"></div>
+                        <div class="preview-cell" data-preview="O"></div>
+                        <div class="preview-cell"></div>
+                        <div class="preview-cell" data-preview="X"></div>
+                    </div>
                 </div>
+            </section>
+        </div>
+
+        <div class="drawer-footer">
+            <div class="drawer-actions">
+                <button class="reset-btn" id="resetTheme">Reset Default</button>
+                <button class="save-btn" id="saveTheme">Save Appearance</button>
             </div>
+            <p id="settingsMessage" aria-live="polite"></p>
+        </div>
+    </aside>
 
-            <div class="settings-actions">
-                <button id="resetAppearanceBtn" class="reset-appearance-btn"
-                    type="button">Reset to Default</button>
-                <button id="saveAppearanceBtn" class="save-appearance-btn"
-                    type="button">Save Appearance</button>
+    <!-- Game history drawer -->
+    <div class="drawer-overlay" id="historyOverlay"></div>
+
+    <aside class="drawer" id="historyDrawer" role="dialog"
+           aria-modal="true" aria-label="Game history" aria-hidden="true">
+        <div class="drawer-header">
+            <div>
+                <h2>Game History</h2>
+                <p>Your recent game results.</p>
             </div>
+            <button class="close-btn" id="closeHistory" aria-label="Close history">×</button>
+        </div>
 
-            <p id="appearanceStatus" class="appearance-status"
-                role="status" aria-live="polite"></p>
-        </aside>
-
-        <footer class="app-footer">
-            <p>© 2026 TIC TAC TOE | PLAY SMART</p>
-        </footer>
-    </div>
-
-    <script src="game.js"></script>
+        <div class="drawer-content">
+            <div class="history-toolbar">
+                <strong>Recent games</strong>
+                <button class="action-btn" id="refreshHistory">Refresh</button>
+            </div>
+            <div class="history-list" id="historyList">
+                <div class="history-empty">Loading history...</div>
+            </div>
+        </div>
+    </aside>
 </body>
 </html>
