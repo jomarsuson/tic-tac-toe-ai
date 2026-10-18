@@ -3,6 +3,13 @@ const API_URL = "https://tic-tac-toe-backend-1vkx.onrender.com";
 const $ = selector => document.querySelector(selector);
 const $$ = selector => [...document.querySelectorAll(selector)];
 
+/* Null-safe listener: a missing element can never stop the rest of the script */
+const on = (selector, eventName, handler) => {
+  const el = document.querySelector(selector);
+  if (el) el.addEventListener(eventName, handler);
+  else console.warn("Element not found:", selector);
+};
+
 /* Safe storage (won't crash in private mode or when storage is blocked) */
 const store = {
   get: key => { try { return localStorage.getItem(key); } catch { return null; } },
@@ -11,7 +18,7 @@ const store = {
 };
 
 const cells = $$(".cell");
-const statusText = $("#status");
+const statusText = $("#status") || document.createElement("p");
 const settingsDrawer = $("#settingsDrawer");
 const historyDrawer = $("#historyDrawer");
 const backdrop = $("#drawerBackdrop");
@@ -434,29 +441,29 @@ function closeDrawers() {
   $("#menuBtn").setAttribute("aria-expanded", "false");
 }
 
-$("#menuBtn").addEventListener("click", () => openDrawer(settingsDrawer));
-$("#closeMenuBtn").addEventListener("click", closeDrawers);
-$("#closeHistoryBtn").addEventListener("click", closeDrawers);
+on("#menuBtn", "click", () => openDrawer(settingsDrawer));
+on("#closeMenuBtn", "click", closeDrawers);
+on("#closeHistoryBtn", "click", closeDrawers);
 backdrop.addEventListener("click", closeDrawers);
 
 document.addEventListener("keydown", event => {
   if (event.key === "Escape") closeDrawers();
 });
 
-$("#historyMenuBtn").addEventListener("click", () => {
+on("#historyMenuBtn", "click", () => {
   openDrawer(historyDrawer);
   loadGameHistory();
 });
 
-$("#aiModeBtn").addEventListener("click", () => setMode("ai"));
-$("#twoPlayerBtn").addEventListener("click", () => setMode("two"));
+on("#aiModeBtn", "click", () => setMode("ai"));
+on("#twoPlayerBtn", "click", () => setMode("two"));
 
-$("#startBtn").addEventListener("click", () => {
+on("#startBtn", "click", () => {
   startGame();
   playSound(500, 0.12);
 });
 
-$("#restartBtn").addEventListener("click", () => {
+on("#restartBtn", "click", () => {
   startGame();
   playSound(380, 0.1);
 });
@@ -473,7 +480,7 @@ function updateSoundUI() {
   $("#soundSwitch").classList.toggle("on", soundOn);
 }
 
-$("#soundBtn").addEventListener("click", () => {
+on("#soundBtn", "click", () => {
   soundOn = !soundOn;
   store.set("tttSound", String(soundOn));
   updateSoundUI();
@@ -561,10 +568,10 @@ $$(".theme-option").forEach(button => {
 });
 
 ["backgroundColor", "accentColor", "cardColor"].forEach(id => {
-  $(`#${id}`).addEventListener("input", applyCustomColors);
+  on(`#${id}`, "input", applyCustomColors);
 });
 
-$("#resetThemeBtn").addEventListener("click", () => setTheme("chocolate"));
+on("#resetThemeBtn", "click", () => setTheme("chocolate"));
 
 /* Game history */
 
@@ -619,7 +626,7 @@ async function loadGameHistory() {
   }
 }
 
-$("#refreshHistoryBtn").addEventListener("click", loadGameHistory);
+on("#refreshHistoryBtn", "click", loadGameHistory);
 
 /* Restore saved preferences */
 
