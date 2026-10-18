@@ -1,1320 +1,710 @@
-/* =========================================================
-   SUPABASE CONFIGURATION
-   Replace these with your own Supabase project values.
-   Never put a service_role or secret key in browser code.
-   ========================================================= */
-const SUPABASE_URL = "https://ucydyufnxgcsetjasskl.supabase.co";
-const SUPABASE_ANON_KEY = "YOUR_SUPABASE_PUBLISHABLE_KEY";
-const sb = (
-  window.supabase &&
-  !SUPABASE_URL.startsWith("PASTE") &&
-  !SUPABASE_ANON_KEY.startsWith("PASTE")
-)
-  ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
-  : null;
-
-let me = null;
-let game = null;
-let chan = null;
-let pollTimer = null;
-let finalShown = null;
-let oppName = "Opponent";
-let oppCached = null;
+const API_URL = "https://tic-tac-toe-backend-1vkx.onrender.com";
 
 const $ = selector => document.querySelector(selector);
+const $$ = selector => [...document.querySelectorAll(selector)];
 
-const WINS = [
+/* Null-safe listener: a missing element can never stop the rest of the script */
+const on = (selector, eventName, handler) => {
+  const el = document.querySelector(selector);
+  if (el) el.addEventListener(eventName, handler);
+  else console.warn("Element not found:", selector);
+};
+
+/* Safe storage (won't crash in private mode or when storage is blocked) */
+const store = {
+  get: key => { try { return localStorage.getItem(key); } catch { return null; } },
+  set: (key, value) => { try { localStorage.setItem(key, value); } catch { /* ignore */ } },
+  remove: key => { try { localStorage.removeItem(key); } catch { /* ignore */ } }
+};
+
+const cells = $$(".cell");
+const statusText = $("#status") || document.createElement("p");
+const settingsDrawer = $("#settingsDrawer");
+const historyDrawer = $("#historyDrawer");
+const backdrop = $("#drawerBackdrop");
+
+let board = Array(9).fill("");
+let gameActive = false;
+let aiThinking = false;
+let resultSaved = false;
+let mode = "ai";
+let soundOn = store.get("tttSound") !== "false";
+let scores = { player: 0, ai: 0, draws: 0 };
+let audioContext = null;
+let toastTimer;
+let aiTimer = null;
+let overlayTimer = null;
+
+const wins = [
   [0, 1, 2], [3, 4, 5], [6, 7, 8],
   [0, 3, 6], [1, 4, 7], [2, 5, 8],
   [0, 4, 8], [2, 4, 6]
 ];
 
-const THEMES = {
-  Chocolate: {
-    page: "#F5EBDD", card: "#FFF9F0", accent: "#80543D",
-    text: "#38241D", muted: "#806B5A", border: "#D9C5AF",
-    cell: "#F5EBDD"
+const themes = {
+  chocolate: {
+    page: "#F5EBDD", card: "#FFF9F0",
+    accent: "#80543D", text: "#38241D",
+    muted: "#806B5A", border: "#D9C5AF", cell: "#F5EBDD"
   },
-  Dark: {
-    page: "#171717", card: "#262626", accent: "#C59A6B",
-    text: "#F7F0E8", muted: "#C2B7AB", border: "#51463C",
-    cell: "#202020"
+  dark: {
+    page: "#171717", card: "#262626",
+    accent: "#C59A6B", text: "#F7F0E8",
+    muted: "#C2B7AB", border: "#51463C", cell: "#202020"
   },
-  Ocean: {
-    page: "#EAF3FA", card: "#FFFFFF", accent: "#246B9E",
-    text: "#17334A", muted: "#58758A", border: "#BED4E4",
-    cell: "#EAF3FA"
+  ocean: {
+    page: "#EAF3FA", card: "#FFFFFF",
+    accent: "#246B9E", text: "#17334A",
+    muted: "#58758A", border: "#BED4E4", cell: "#EAF3FA"
   },
-  Forest: {
-    page: "#EAF1E8", card: "#FFFFFF", accent: "#386641",
-    text: "#233B28", muted: "#647A68", border: "#C5D5C3",
-    cell: "#EAF1E8"
+  forest: {
+    page: "#EAF1E8", card: "#FFFFFF",
+    accent: "#386641", text: "#233B28",
+    muted: "#647A68", border: "#C5D5C3", cell: "#EAF1E8"
   },
-  Purple: {
-    page: "#211A35", card: "#302644", accent: "#A78BFA",
-    text: "#F5EEFF", muted: "#C5B8DD", border: "#594875",
-    cell: "#261F3A"
+  purple: {
+    page: "#211A35", card: "#302644",
+    accent: "#A78BFA", text: "#F5EEFF",
+    muted: "#C5B8DD", border: "#594875", cell: "#261F3A"
   }
 };
 
-const store = {
-  get(key) {
-    try {
-      return localStorage.getItem(key);
-    } catch {
-      return null;
-    }
-  },
-  set(key, value) {
-    try {
-      localStorage.setItem(key, value);
-    } catch {
-      // Storage may be disabled by the browser.
-    }
-  }
-};
-
-let board;
-let turn;
-let active;
-let thinking;
-let mode = "ai";
-let sound = store.get("ttt-sound") !== "off";
-let scores = { X: 0, O: 0, D: 0 };
-let aiTimer;
-let endTimer;
-let toastTimer;
-let audio;
-
-const cells = [];
-
-/* =========================================================
-   BOARD SETUP
-   ========================================================= */
-
-for (let i = 0; i < 9; i++) {
-  const button = document.createElement("button");
-
-  button.type = "button";
-  button.className = "cell";
-  button.setAttribute("aria-label", `Cell ${i + 1}, empty`);
-  button.addEventListener("click", () => play(i));
-
-  $("#board").append(button);
-  cells.push(button);
-}
-
-/* =========================================================
-   SOUND AND STATUS
-   ========================================================= */
-
-function beep(freq, duration = 0.1) {
-  if (!sound) return;
-
-  try {
-    audio = audio || new (
-      window.AudioContext || window.webkitAudioContext
-    )();
-
-    if (audio.state === "suspended") {
-      audio.resume();
-    }
-
-    const oscillator = audio.createOscillator();
-    const gain = audio.createGain();
-
-    oscillator.frequency.value = freq;
-    gain.gain.setValueAtTime(0.08, audio.currentTime);
-    gain.gain.exponentialRampToValueAtTime(
-      0.001,
-      audio.currentTime + duration
-    );
-
-    oscillator.connect(gain);
-    gain.connect(audio.destination);
-
-    oscillator.start();
-    oscillator.stop(audio.currentTime + duration);
-  } catch {
-    // Sound is optional; the game still works without it.
-  }
-}
-
-function toast(message) {
-  const element = $("#toast");
-
-  element.textContent = message;
-  element.hidden = false;
-
+function showToast(message) {
+  const toast = $("#toast");
+  toast.textContent = message;
+  toast.classList.add("show");
   clearTimeout(toastTimer);
-
-  toastTimer = setTimeout(() => {
-    element.hidden = true;
-  }, 2600);
+  toastTimer = setTimeout(() => toast.classList.remove("show"), 2400);
 }
 
 function setStatus(message) {
-  $("#status").textContent = message;
+  statusText.textContent = message;
 }
 
-function turnText() {
-  return mode === "ai"
-    ? "Your turn — X"
-    : `Player ${turn}’s turn`;
+function playSound(frequency = 440, duration = 0.09) {
+  if (!soundOn) return;
+
+  try {
+    audioContext ||= new (
+      window.AudioContext || window.webkitAudioContext
+    )();
+
+    if (audioContext.state === "suspended") {
+      audioContext.resume();
+    }
+
+    const oscillator = audioContext.createOscillator();
+    const gain = audioContext.createGain();
+
+    oscillator.frequency.value = frequency;
+    oscillator.type = "sine";
+    gain.gain.setValueAtTime(0.08, audioContext.currentTime);
+    gain.gain.exponentialRampToValueAtTime(
+      0.001,
+      audioContext.currentTime + duration
+    );
+
+    oscillator.connect(gain);
+    gain.connect(audioContext.destination);
+    oscillator.start();
+    oscillator.stop(audioContext.currentTime + duration);
+  } catch {
+    // Sound is optional if the browser does not support audio.
+  }
 }
 
-/* =========================================================
-   GAME LOGIC
-   ========================================================= */
+function setMode(newMode) {
+  mode = newMode;
+  $("#aiModeBtn").classList.toggle("active", mode === "ai");
+  $("#twoPlayerBtn").classList.toggle("active", mode === "two");
+  startGame();
+}
 
-function start() {
+function startGame() {
+  // Cancel anything still pending from the previous round
   clearTimeout(aiTimer);
-  clearTimeout(endTimer);
+  clearTimeout(overlayTimer);
 
-  $("#modal").hidden = true;
+  $("#victoryOverlay")?.remove();
+  cells.forEach(cell => cell.classList.remove("winning-cell"));
 
   board = Array(9).fill("");
-  turn = "X";
-  active = true;
-  thinking = false;
+  gameActive = true;
+  aiThinking = false;
+  resultSaved = false;
 
   cells.forEach((cell, index) => {
     cell.textContent = "";
     cell.disabled = false;
-    cell.className = "cell";
-
     delete cell.dataset.mark;
-
-    cell.setAttribute(
-      "aria-label",
-      `Cell ${index + 1}, empty`
-    );
+    cell.setAttribute("aria-label", `Cell ${index + 1}, empty`);
   });
 
-  setStatus(turnText());
+  setStatus(mode === "ai" ? "Your turn — X" : "Player X's turn");
 }
 
-function result(position) {
-  for (const [x, y, z] of WINS) {
+function checkWinner(position) {
+  for (const [a, b, c] of wins) {
     if (
-      position[x] &&
-      position[x] === position[y] &&
-      position[y] === position[z]
+      position[a] &&
+      position[a] === position[b] &&
+      position[b] === position[c]
     ) {
-      return position[x];
+      return position[a];
     }
   }
 
   return position.every(Boolean) ? "draw" : null;
 }
 
-function play(index) {
-  if (mode === "online") {
-    onlineMove(index);
-    return;
-  }
-
-  if (!active || thinking || board[index]) return;
-
-  place(index, turn);
+function getWinningLine(position) {
+  return wins.find(([a, b, c]) =>
+    position[a] &&
+    position[a] === position[b] &&
+    position[b] === position[c]
+  ) || [];
 }
 
-function place(index, mark) {
-  board[index] = mark;
+function showVictoryEffect(result) {
+  $("#victoryOverlay")?.remove();
 
-  const cell = cells[index];
+  const title = result === "draw"
+    ? "IT'S A DRAW!"
+    : result === "X"
+      ? (mode === "ai" ? "YOU WIN!" : "PLAYER X WINS!")
+      : (mode === "ai" ? "AI WINS!" : "PLAYER O WINS!");
 
-  cell.textContent = mark;
-  cell.dataset.mark = mark;
-  cell.disabled = true;
-  cell.setAttribute(
-    "aria-label",
-    `Cell ${index + 1}, ${mark}`
-  );
+  const overlay = document.createElement("div");
+  overlay.id = "victoryOverlay";
+  overlay.className =
+    `victory-overlay ${result === "draw" ? "is-draw" : "is-win"}`;
 
-  beep(mark === "X" ? 520 : 360);
+  overlay.setAttribute("role", "dialog");
+  overlay.setAttribute("aria-modal", "true");
+  overlay.setAttribute("aria-label", title);
 
-  const gameResult = result(board);
+  const panel = document.createElement("div");
+  panel.className = "victory-panel";
 
-  if (gameResult) {
-    finish(gameResult);
-    return;
-  }
+  const heading = document.createElement("h2");
+  heading.textContent = title;
 
-  turn = mark === "X" ? "O" : "X";
-
-  if (mode === "ai" && turn === "O") {
-    thinking = true;
-    setStatus("Computer is thinking…");
-
-    aiTimer = setTimeout(() => {
-      thinking = false;
-      place(bestMove(board), "O");
-    }, 450);
-  } else {
-    setStatus(turnText());
-  }
-}
-
-function finish(gameResult) {
-  active = false;
-  cells.forEach(cell => {
-    cell.disabled = true;
-  });
-
-  let title;
-  let message;
-
-  if (gameResult === "draw") {
-    scores.D++;
-    title = "It’s a draw!";
-    message = "A close match. Try again!";
-    beep(280, 0.2);
-  } else {
-    scores[gameResult]++;
-
-    const winningLine = WINS.find(([x, y, z]) =>
-      board[x] === gameResult &&
-      board[y] === gameResult &&
-      board[z] === gameResult
-    );
-
-    if (winningLine) {
-      winningLine.forEach(index => {
-        cells[index].classList.add("win");
-      });
-    }
-
-    if (mode === "ai") {
-      title = gameResult === "X"
-        ? "You win!"
-        : "Computer wins!";
-
-      message = gameResult === "X"
+  const message = document.createElement("p");
+  message.textContent = result === "draw"
+    ? "A close match. Try again!"
+    : mode === "two"
+      ? "Great game, both of you!"
+      : result === "X"
         ? "Great move. You played well!"
         : "Better luck next round!";
-    } else {
-      title = `Player ${gameResult} wins!`;
-      message = "Great game, both of you!";
-    }
 
-    beep(gameResult === "X" ? 660 : 200, 0.25);
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "victory-play-again";
+  button.textContent = "PLAY AGAIN";
+
+  button.addEventListener("click", () => {
+    overlay.remove();
+    startGame();
+    playSound(500, 0.12);
+  });
+
+  panel.append(heading, message, button);
+  overlay.append(panel);
+  document.body.append(overlay);
+
+  if (result !== "draw") {
+    for (let i = 0; i < 48; i++) {
+      const bit = document.createElement("span");
+      bit.className = "confetti-piece";
+      bit.style.left = `${Math.random() * 100}%`;
+      bit.style.animationDelay = `${Math.random() * 0.7}s`;
+      bit.style.setProperty(
+        "--confetti-rotate",
+        `${Math.random() * 720 - 360}deg`
+      );
+      overlay.append(bit);
+    }
   }
 
-  $("#sx").textContent = scores.X;
-  $("#so").textContent = scores.O;
-  $("#sd").textContent = scores.D;
-
-  setStatus(title);
-  saveResult(gameResult);
-
-  endTimer = setTimeout(() => {
-    $("#mTitle").textContent = title;
-    $("#mText").textContent = message;
-    $("#modal").hidden = false;
-    $("#againBtn").focus();
-  }, 600);
+  button.focus();
 }
 
-/* =========================================================
-   COMPUTER AI - MINIMAX
-   ========================================================= */
+function updateCell(index, mark) {
+  board[index] = mark;
+  cells[index].textContent = mark;
+  cells[index].dataset.mark = mark;
+  cells[index].setAttribute("aria-label", `Cell ${index + 1}, ${mark}`);
+  cells[index].disabled = true;
+  playSound(mark === "X" ? 520 : 360);
+}
 
-function minimax(position, isO, depth) {
-  const gameResult = result(position);
+function handleCellClick(event) {
+  const index = Number(event.currentTarget.dataset.index);
 
-  if (gameResult === "O") return 10 - depth;
-  if (gameResult === "X") return depth - 10;
-  if (gameResult === "draw") return 0;
+  if (!gameActive || aiThinking || board[index]) return;
 
-  let best = isO ? -Infinity : Infinity;
+  if (mode === "ai") {
+    updateCell(index, "X");
+
+    if (finishIfOver()) return;
+
+    aiThinking = true;
+    cells.forEach(cell => {
+      cell.disabled = true;
+    });
+
+    setStatus("AI is thinking...");
+
+    aiTimer = setTimeout(() => {
+      if (!gameActive) return;
+
+      const move = getBestMove(board);
+
+      if (move !== -1) {
+        updateCell(move, "O");
+      }
+
+      aiThinking = false;
+      cells.forEach((cell, i) => {
+        cell.disabled = !gameActive || Boolean(board[i]);
+      });
+
+      if (!finishIfOver()) {
+        setStatus("Your turn — X");
+      }
+    }, 450);
+  } else {
+    const mark = board.filter(Boolean).length % 2 === 0 ? "X" : "O";
+    updateCell(index, mark);
+
+    if (!finishIfOver()) {
+      setStatus(mark === "X" ? "Player O's turn" : "Player X's turn");
+    }
+  }
+}
+
+function minimax(position, maximizing, depth = 0) {
+  const result = checkWinner(position);
+
+  if (result === "O") return 10 - depth;
+  if (result === "X") return depth - 10;
+  if (result === "draw") return 0;
+
+  if (maximizing) {
+    let best = -Infinity;
+
+    for (let i = 0; i < 9; i++) {
+      if (position[i]) continue;
+
+      position[i] = "O";
+      best = Math.max(best, minimax(position, false, depth + 1));
+      position[i] = "";
+    }
+
+    return best;
+  }
+
+  let best = Infinity;
 
   for (let i = 0; i < 9; i++) {
     if (position[i]) continue;
 
-    position[i] = isO ? "O" : "X";
-
-    const score = minimax(position, !isO, depth + 1);
-
+    position[i] = "X";
+    best = Math.min(best, minimax(position, true, depth + 1));
     position[i] = "";
-
-    best = isO
-      ? Math.max(best, score)
-      : Math.min(best, score);
   }
 
   return best;
 }
 
-function bestMove(position) {
-  let best = -Infinity;
-  let move = -1;
+function getBestMove(position) {
+  let bestScore = -Infinity;
+  let bestMove = -1;
 
   for (let i = 0; i < 9; i++) {
     if (position[i]) continue;
 
     position[i] = "O";
-
-    const score = minimax(position, false, 1);
-
+    const score = minimax(position, false);
     position[i] = "";
 
-    if (score > best) {
-      best = score;
-      move = i;
+    if (score > bestScore) {
+      bestScore = score;
+      bestMove = i;
     }
   }
 
-  return move;
+  return bestMove;
 }
 
-/* =========================================================
-   GAME MODES
-   ========================================================= */
+function finishIfOver() {
+  const result = checkWinner(board);
+  if (!result) return false;
 
-function setMode(newMode) {
-  if (newMode === "online" && (!me || me.guest)) {
-    toast("Log in to play online.");
-    return;
-  }
+  gameActive = false;
+  aiThinking = false;
+  cells.forEach(cell => cell.disabled = true);
 
-  if (mode === "online" && newMode !== "online") {
-    leaveCurrent();
-  }
-
-  mode = newMode;
-
-  [
-    ["aiBtn", "ai"],
-    ["twoBtn", "two"],
-    ["onlineBtn", "online"]
-  ].forEach(([id, key]) => {
-    const button = $("#" + id);
-
-    button.classList.toggle("on", key === newMode);
-    button.setAttribute(
-      "aria-pressed",
-      String(key === newMode)
+  if (result === "draw") {
+    scores.draws++;
+    setStatus("It's a draw!");
+    playSound(280, 0.2);
+  } else if (result === "X") {
+    scores.player++;
+    setStatus(mode === "ai" ? "You win!" : "Player X wins!");
+    playSound(660, 0.2);
+    getWinningLine(board).forEach(index =>
+      cells[index]?.classList.add("winning-cell")
     );
-  });
-
-  $("#scores").hidden = newMode === "online";
-
-  if (newMode === "online") {
-    showLobby();
   } else {
-    $("#lobby").hidden = true;
-    $("#gameArea").hidden = false;
-    $("#newBtn").textContent = "New round";
-    $("#againBtn").textContent = "Play again";
-    start();
+    scores.ai++;
+    setStatus(mode === "ai" ? "AI wins!" : "Player O wins!");
+    playSound(200, 0.2);
+    getWinningLine(board).forEach(index =>
+      cells[index]?.classList.add("winning-cell")
+    );
+  }
+
+  $("#playerWins").textContent = scores.player;
+  $("#aiWins").textContent = scores.ai;
+  $("#draws").textContent = scores.draws;
+
+  saveGameResult(result);
+  overlayTimer = setTimeout(() => showVictoryEffect(result), 300);
+  return true;
+}
+
+/* Backend requests with a timeout (free hosting can take a while to wake up) */
+
+async function fetchWithTimeout(url, options = {}, ms = 30000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ms);
+
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
   }
 }
 
-$("#aiBtn").addEventListener("click", () => setMode("ai"));
-$("#twoBtn").addEventListener("click", () => setMode("two"));
-$("#onlineBtn").addEventListener("click", () => setMode("online"));
+async function saveGameResult(result) {
+  if (resultSaved) return;
+  resultSaved = true;
 
-$("#newBtn").addEventListener("click", async () => {
-  if (mode === "online") {
-    if (
-      game &&
-      game.status === "playing" &&
-      !confirm("Leave this game? You will forfeit.")
-    ) {
-      return;
-    }
+  let resultName;
 
-    await leaveToLobby();
-    return;
+  if (result === "draw") {
+    resultName = "Draw";
+  } else if (mode === "two") {
+    resultName = result === "X" ? "Player X Wins" : "Player O Wins";
+  } else {
+    resultName = result === "X" ? "Player Wins" : "AI Wins";
   }
 
-  start();
-  beep(440);
-});
+  try {
+    const response = await fetchWithTimeout(`${API_URL}/api/save-game`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ result: resultName })
+    });
 
-$("#againBtn").addEventListener("click", async () => {
-  if (mode === "online") {
-    await leaveToLobby();
-    return;
+    if (!response.ok) throw new Error("Could not save game");
+
+    if (historyDrawer.classList.contains("open")) loadGameHistory();
+  } catch (error) {
+    console.error("Game history save failed:", error);
+    showToast("Game finished, but saving history failed.");
   }
+}
 
-  start();
-  beep(500);
-});
-
-/* =========================================================
-   DRAWERS: SETTINGS, HISTORY, FEEDBACK
-   ========================================================= */
+/* Settings drawers */
 
 function openDrawer(drawer) {
-  const drawers = [
-    $("#drawer"),
-    $("#histDrawer"),
-    $("#fbDrawer")
-  ];
+  closeDrawers();
+  drawer.classList.add("open");
+  drawer.setAttribute("aria-hidden", "false");
+  backdrop.classList.add("open");
 
-  drawers.forEach(item => {
-    const isOpen = item === drawer;
+  if (drawer === settingsDrawer) {
+    $("#menuBtn").setAttribute("aria-expanded", "true");
+  }
+}
 
-    item.classList.toggle("open", isOpen);
-    item.setAttribute("aria-hidden", String(!isOpen));
+function closeDrawers() {
+  [settingsDrawer, historyDrawer].forEach(drawer => {
+    drawer.classList.remove("open");
+    drawer.setAttribute("aria-hidden", "true");
   });
 
-  $("#backdrop").hidden = !drawer;
-
-  $("#menuBtn").setAttribute(
-    "aria-expanded",
-    String(drawer === $("#drawer"))
-  );
+  backdrop.classList.remove("open");
+  $("#menuBtn").setAttribute("aria-expanded", "false");
 }
 
-$("#menuBtn").addEventListener("click", () => {
-  openDrawer($("#drawer"));
-});
-
-$("#closeBtn").addEventListener("click", () => {
-  openDrawer(null);
-});
-
-$("#closeHist").addEventListener("click", () => {
-  openDrawer(null);
-});
-
-$("#closeFb").addEventListener("click", () => {
-  openDrawer(null);
-});
-
-$("#backdrop").addEventListener("click", () => {
-  openDrawer(null);
-});
+on("#menuBtn", "click", () => openDrawer(settingsDrawer));
+on("#closeMenuBtn", "click", closeDrawers);
+on("#closeHistoryBtn", "click", closeDrawers);
+backdrop.addEventListener("click", closeDrawers);
 
 document.addEventListener("keydown", event => {
-  if (event.key === "Escape") {
-    openDrawer(null);
-  }
+  if (event.key === "Escape") closeDrawers();
 });
 
-/* =========================================================
-   COMMENTS AND SUGGESTIONS - SUPABASE
-   ========================================================= */
-
-$("#fbBtn").addEventListener("click", () => {
-  openDrawer($("#fbDrawer"));
-  $("#fbMsg").focus();
+on("#historyMenuBtn", "click", () => {
+  openDrawer(historyDrawer);
+  loadGameHistory();
 });
 
-$("#fbMsg").addEventListener("input", () => {
-  $("#fbCount").textContent =
-    `${$("#fbMsg").value.length} / 500`;
+on("#aiModeBtn", "click", () => setMode("ai"));
+on("#twoPlayerBtn", "click", () => setMode("two"));
+
+on("#startBtn", "click", () => {
+  startGame();
+  playSound(500, 0.12);
 });
 
-async function sendFeedback() {
-  const messageElement = $("#fbMsg");
-  const statusElement = $("#fbStatus");
-  const sendButton = $("#fbSend");
+on("#restartBtn", "click", () => {
+  startGame();
+  playSound(380, 0.1);
+});
 
-  const message = messageElement.value.trim();
-  const type = $("#fbType").value;
-  const name = $("#fbName").value.trim();
+cells.forEach(cell => {
+  cell.addEventListener("click", handleCellClick);
+});
 
-  if (message.length < 3) {
-    statusElement.textContent =
-      "Please write at least 3 characters before sending.";
+/* Sound settings */
 
-    messageElement.focus();
-    return;
-  }
+function updateSoundUI() {
+  $("#soundIcon").textContent = soundOn ? "🔊" : "🔇";
+  $("#soundStatus").textContent = soundOn ? "Sound is on" : "Sound is off";
+  $("#soundSwitch").classList.toggle("on", soundOn);
+}
 
-  if (message.length > 500) {
-    statusElement.textContent =
-      "Your message must be 500 characters or fewer.";
-    return;
-  }
+on("#soundBtn", "click", () => {
+  soundOn = !soundOn;
+  store.set("tttSound", String(soundOn));
+  updateSoundUI();
 
-  if (!sb) {
-    statusElement.textContent =
-      "Supabase is not configured. Add your project URL and anon key in script.js.";
-    return;
-  }
+  if (soundOn) playSound(520, 0.1);
+});
 
-  sendButton.disabled = true;
-  statusElement.textContent = "Sending your feedback…";
+/* Themes and custom colors */
 
-  try {
-    const feedback = {
-      type,
-      name: name || null,
-      message,
+function luma(hex) {
+  const n = parseInt(hex.replace("#", ""), 16);
+  return 0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255);
+}
 
-      // Save the user's ID when signed in.
-      // Guest feedback has a null user_id.
-      user_id: me && !me.guest ? me.id : null
-    };
+function applyTheme(colors) {
+  const root = document.documentElement;
 
-    const { error } = await sb
-      .from("feedback")
-      .insert(feedback);
+  Object.entries(colors).forEach(([key, value]) => {
+    root.style.setProperty(`--${key}`, value);
+  });
 
-    if (error) {
-      throw error;
-    }
+  // Keep button text readable and native controls matched to the theme
+  root.style.setProperty("--on-accent", luma(colors.accent) > 150 ? "#20172E" : "#FFFFFF");
+  root.style.colorScheme = luma(colors.page) < 128 ? "dark" : "light";
+}
 
-    messageElement.value = "";
-    $("#fbCount").textContent = "0 / 500";
-    statusElement.textContent = "";
+function setTheme(name, { silent = false } = {}) {
+  const colors = themes[name];
+  if (!colors) return;
 
-    openDrawer(null);
-    toast("Thanks for your feedback!");
+  applyTheme(colors);
+  store.set("tttTheme", name);
+  store.set("tttCustomColors", JSON.stringify(colors));
 
-  } catch (error) {
-    console.error("Feedback submission failed:", error);
+  $$(".theme-option").forEach(button => {
+    const selected = button.dataset.theme === name;
+    button.classList.toggle("selected", selected);
+    button.setAttribute("aria-pressed", String(selected));
+  });
 
-    statusElement.textContent =
-      "Could not send your message. Please check your connection and try again.";
-  } finally {
-    sendButton.disabled = false;
+  $("#backgroundColor").value = colors.page;
+  $("#accentColor").value = colors.accent;
+  $("#cardColor").value = colors.card;
+
+  if (!silent) {
+    showToast(`${name.charAt(0).toUpperCase() + name.slice(1)} theme applied`);
   }
 }
 
-$("#fbSend").addEventListener("click", sendFeedback);
-
-/* =========================================================
-   GAME HISTORY - SUPABASE
-   ========================================================= */
-
-async function saveResult(gameResult) {
-  // Guests and online matches are not saved by this function.
-  if (!sb || !me || me.guest || mode === "online") {
-    return;
-  }
-
-  const resultName = mode === "ai"
-    ? (
-        gameResult === "draw"
-          ? "Draw"
-          : gameResult === "X"
-            ? "Win"
-            : "Loss"
-      )
-    : (
-        gameResult === "draw"
-          ? "Draw"
-          : `${gameResult} wins`
-      );
+function applyCustomColors() {
+  let previous;
 
   try {
-    const { error } = await sb
-      .from("game_results")
-      .insert({
-        // Required by the user-specific RLS policy.
-        user_id: me.id,
-        mode: mode === "ai" ? "ai" : "local",
-        result: resultName
-      });
-
-    if (error) {
-      console.error("History save failed:", error);
-      toast("Game finished, but saving history failed.");
-      return;
-    }
-
-    if ($("#histDrawer").classList.contains("open")) {
-      await loadHistory();
-    }
-  } catch (error) {
-    console.error("History save failed:", error);
-    toast("Could not save game history.");
+    previous = JSON.parse(store.get("tttCustomColors") || "null");
+  } catch {
+    previous = null;
   }
+
+  const page = $("#backgroundColor").value;
+  const dark = luma(page) < 128;
+
+  const colors = {
+    ...(previous || themes.chocolate),
+    page,
+    accent: $("#accentColor").value,
+    card: $("#cardColor").value,
+    cell: page,
+    // Pick readable text for the chosen background
+    text: dark ? "#F7F0E8" : "#38241D",
+    muted: dark ? "#C2B7AB" : "#806B5A"
+  };
+
+  applyTheme(colors);
+  store.set("tttTheme", "custom");
+  store.set("tttCustomColors", JSON.stringify(colors));
+
+  $$(".theme-option").forEach(button => {
+    button.classList.remove("selected");
+    button.setAttribute("aria-pressed", "false");
+  });
 }
 
-async function loadHistory() {
-  const status = $("#histStatus");
-  const list = $("#histList");
+$$(".theme-option").forEach(button => {
+  button.addEventListener("click", () => setTheme(button.dataset.theme));
+});
 
+["backgroundColor", "accentColor", "cardColor"].forEach(id => {
+  on(`#${id}`, "input", applyCustomColors);
+});
+
+on("#resetThemeBtn", "click", () => setTheme("chocolate"));
+
+/* Game history */
+
+async function loadGameHistory() {
+  const list = $("#historyList");
+  const historyStatus = $("#historyStatus");
+
+  historyStatus.textContent = "Loading history...";
   list.replaceChildren();
 
-  if (!sb || !me || me.guest) {
-    status.textContent =
-      "Log in to see and save your game history.";
-    return;
-  }
-
-  status.textContent = "Loading history…";
-
   try {
-    const { data, error } = await sb
-      .from("game_results")
-      .select("*")
-      .order("created_at", { ascending: false })
-      .limit(50);
+    const response = await fetchWithTimeout(`${API_URL}/api/game-history`);
+    if (!response.ok) throw new Error("History request failed");
 
-    if (error) {
-      throw error;
-    }
+    const data = await response.json();
+    const records = Array.isArray(data)
+      ? data
+      : Array.isArray(data.history)
+        ? data.history
+        : Array.isArray(data.data)
+          ? data.data
+          : [];
 
-    if (!data || data.length === 0) {
-      status.textContent =
-        "No saved games yet. Finish a game to see its result here.";
+    if (!records.length) {
+      historyStatus.textContent =
+        "No saved games yet. Play a game to see results here.";
       return;
     }
 
-    status.textContent =
-      `${data.length} saved result(s)`;
+    historyStatus.textContent = `${records.length} saved result(s)`;
 
-    const labels = {
-      ai: "vs Computer",
-      local: "Same device",
-      online: "Online"
-    };
-
-    data.forEach(record => {
+    records.forEach(record => {
       const item = document.createElement("li");
       const title = document.createElement("strong");
-      const date = document.createElement("small");
+      const details = document.createElement("small");
 
-      title.textContent =
-        `${record.result} · ${labels[record.mode] || record.mode}` +
-        (record.opponent ? ` vs ${record.opponent}` : "");
+      title.textContent = record.result || "Game result";
 
-      date.textContent = record.created_at
+      details.textContent = record.created_at
         ? new Date(record.created_at).toLocaleString()
         : "Date unavailable";
 
-      item.append(title, date);
+      item.append(title, details);
       list.append(item);
     });
-
   } catch (error) {
-    console.error("Could not load history:", error);
-    status.textContent =
-      "Could not load history. Check your Supabase settings and policies.";
+    console.error("History loading failed:", error);
+    historyStatus.textContent =
+      error.name === "AbortError"
+        ? "The server took too long to respond. Try again in a moment."
+        : "Could not load history. Check your backend connection.";
   }
 }
 
-$("#histBtn").addEventListener("click", () => {
-  openDrawer($("#histDrawer"));
-  loadHistory();
-});
+on("#refreshHistoryBtn", "click", loadGameHistory);
 
-$("#refreshHist").addEventListener("click", loadHistory);
+/* Restore saved preferences */
 
-/* =========================================================
-   LOGIN AND ACCOUNT CREATION
-   ========================================================= */
+function restorePreferences() {
+  const savedTheme = store.get("tttTheme") || "chocolate";
+  const savedColors = store.get("tttCustomColors");
 
-let authMode = "login";
-
-function showScreen(screenName) {
-  $("#auth").hidden = screenName !== "auth";
-  $("#app").hidden = screenName !== "app";
-  $("#menuBtn").hidden = screenName !== "app";
-}
-
-function setAuthMode(newMode) {
-  authMode = newMode;
-
-  $("#tabLogin").classList.toggle("on", newMode === "login");
-  $("#tabSignup").classList.toggle("on", newMode === "signup");
-
-  $("#userField").hidden = newMode !== "signup";
-
-  $("#authGo").textContent =
-    newMode === "login" ? "Log in" : "Create account";
-
-  $("#password").autocomplete =
-    newMode === "login" ? "current-password" : "new-password";
-
-  $("#authMsg").textContent = "";
-}
-
-$("#tabLogin").addEventListener("click", () => {
-  setAuthMode("login");
-});
-
-$("#tabSignup").addEventListener("click", () => {
-  setAuthMode("signup");
-});
-
-async function submitAuth() {
-  const message = $("#authMsg");
-  const button = $("#authGo");
-
-  const email = $("#email").value.trim();
-  const password = $("#password").value;
-  const username = $("#username").value.trim();
-
-  if (!sb) {
-    message.textContent =
-      "Add your Supabase URL and anon key at the top of script.js first.";
-    return;
-  }
-
-  if (!email || password.length < 6) {
-    message.textContent =
-      "Enter your email and a password of at least 6 characters.";
-    return;
-  }
-
-  if (
-    authMode === "signup" &&
-    !/^[A-Za-z0-9_]{3,20}$/.test(username)
-  ) {
-    message.textContent =
-      "Username must be 3–20 letters, numbers or underscores.";
-    return;
-  }
-
-  button.disabled = true;
-  message.textContent = "Please wait…";
-
-  try {
-    if (authMode === "signup") {
-      const { data, error } = await sb.auth.signUp({
-        email,
-        password,
-        options: {
-          data: { username }
-        }
-      });
-
-      if (error) throw error;
-
-      if (!data.session) {
-        setAuthMode("login");
-        message.textContent =
-          "Account created. Check your email to confirm it, then log in.";
-        return;
-      }
-
-      await enter(data.user);
-
-    } else {
-      const { data, error } = await sb.auth.signInWithPassword({
-        email,
-        password
-      });
-
-      if (error) throw error;
-
-      await enter(data.user);
-    }
-
-  } catch (error) {
-    message.textContent =
-      error.message || "Something went wrong.";
-  } finally {
-    button.disabled = false;
-  }
-}
-
-$("#authGo").addEventListener("click", submitAuth);
-
-$("#password").addEventListener("keydown", event => {
-  if (event.key === "Enter") {
-    submitAuth();
-  }
-});
-
-$("#guestBtn").addEventListener("click", () => {
-  me = {
-    guest: true,
-    username: "Guest"
-  };
-
-  afterEnter();
-});
-
-async function enter(user) {
-  let username =
-    user.user_metadata && user.user_metadata.username;
-
-  try {
-    const { data } = await sb
-      .from("profiles")
-      .select("username")
-      .eq("id", user.id)
-      .maybeSingle();
-
-    if (data && data.username) {
-      username = data.username;
-    }
-  } catch (error) {
-    console.warn("Could not load profile username:", error);
-  }
-
-  me = {
-    id: user.id,
-    username: username || (user.email || "Player").split("@")[0],
-    guest: false
-  };
-
-  afterEnter();
-}
-
-function afterEnter() {
-  $("#logoutLabel").textContent = me.guest
-    ? "Log in / create account"
-    : `Log out (${me.username})`;
-
-  showScreen("app");
-
-  setMode(mode === "online" && me.guest ? "ai" : mode);
-}
-
-$("#logoutBtn").addEventListener("click", async () => {
-  openDrawer(null);
-
-  await leaveCurrent();
-
-  if (sb && me && !me.guest) {
-    await sb.auth.signOut();
-  }
-
-  me = null;
-  $("#password").value = "";
-
-  showScreen("auth");
-});
-
-async function boot() {
-  if (!sb) {
-    $("#authMsg").textContent =
-      "Add your Supabase URL and anon key in script.js. You can still play as a guest.";
-
-    showScreen("auth");
-    return;
-  }
-
-  try {
-    const { data, error } = await sb.auth.getSession();
-
-    if (error) throw error;
-
-    if (data.session) {
-      await enter(data.session.user);
-    } else {
-      showScreen("auth");
-    }
-  } catch (error) {
-    console.error("Could not check login session:", error);
-    showScreen("auth");
-  }
-}
-
-/* =========================================================
-   ONLINE PLAY
-   Requires the Supabase online-game tables and RPC functions
-   from your existing project.
-   ========================================================= */
-
-function stopWatch() {
-  if (chan && sb) {
-    sb.removeChannel(chan);
-    chan = null;
-  }
-
-  clearInterval(pollTimer);
-  pollTimer = null;
-}
-
-function watch(currentGame) {
-  stopWatch();
-
-  chan = sb
-    .channel("game-" + currentGame.id)
-    .on(
-      "postgres_changes",
-      {
-        event: "UPDATE",
-        schema: "public",
-        table: "games",
-        filter: "id=eq." + currentGame.id
-      },
-      payload => applyGame(payload.new)
-    )
-    .subscribe();
-
-  // Backup polling in case a live update is missed.
-  pollTimer = setInterval(async () => {
-    const { data, error } = await sb
-      .from("games")
-      .select("*")
-      .eq("id", currentGame.id)
-      .maybeSingle();
-
-    if (!error && data) {
-      applyGame(data);
-    }
-  }, 2500);
-}
-
-function showLobby() {
-  clearTimeout(aiTimer);
-  clearTimeout(endTimer);
-
-  $("#modal").hidden = true;
-
-  stopWatch();
-  game = null;
-
-  $("#gameArea").hidden = true;
-  $("#lobby").hidden = false;
-
-  $("#lobbyHi").textContent =
-    `Signed in as ${me.username}. Play a friend anywhere in the world.`;
-
-  $("#lobbyMsg").textContent = "";
-  setStatus("Choose how to find an opponent");
-}
-
-async function leaveCurrent() {
-  const currentGame = game;
-
-  stopWatch();
-  game = null;
-
-  if (
-    currentGame &&
-    currentGame.status !== "finished" &&
-    sb
-  ) {
+  if (savedTheme === "custom" && savedColors) {
     try {
-      await sb.rpc("leave_game", {
-        p_id: currentGame.id
-      });
-    } catch (error) {
-      console.warn("Could not leave online game:", error);
+      const colors = JSON.parse(savedColors);
+      applyTheme(colors);
+
+      $("#backgroundColor").value = colors.page;
+      $("#accentColor").value = colors.accent;
+      $("#cardColor").value = colors.card;
+    } catch {
+      setTheme("chocolate", { silent: true });
     }
+  } else {
+    setTheme(themes[savedTheme] ? savedTheme : "chocolate", { silent: true });
   }
+
+  store.remove("tttCustomLayout"); // clear any layout saved by the old editor
+  updateSoundUI();
 }
 
-async function leaveToLobby() {
-  await leaveCurrent();
-  showLobby();
-}
+restorePreferences();
+startGame();
 
-async function lobbyDo(call) {
-  const message = $("#lobbyMsg");
+/* Comments and Suggestions
+   Feedback is saved in localStorage on this device.
+   It is not sent to the website owner or backend server.
+*/
+on("#feedbackForm", "submit", event => {
+  event.preventDefault();
 
-  const buttons = [
-    $("#createBtn"),
-    $("#joinBtn"),
-    $("#quickBtn")
-  ];
+  const nameInput = $("#feedbackName");
+  const typeInput = $("#feedbackType");
+  const messageInput = $("#feedbackMessage");
+  const status = $("#feedbackStatus");
+  const submitButton = $("#submitFeedbackBtn");
 
-  message.textContent = "Please wait…";
-  buttons.forEach(button => {
-    button.disabled = true;
-  });
+  const message = messageInput.value.trim();
+
+  if (!message) {
+    status.textContent = "Please enter your comment or suggestion.";
+    status.className = "feedback-status error";
+    messageInput.focus();
+    return;
+  }
+
+  const feedback = {
+    name: nameInput.value.trim() || "Anonymous",
+    type: typeInput.value,
+    message,
+    created_at: new Date().toISOString()
+  };
+
+  let savedFeedback = [];
 
   try {
-    const { data, error } = await call();
-
-    if (error) throw error;
-
-    enterGame(data);
-  } catch (error) {
-    message.textContent =
-      error.message || "Something went wrong.";
-  } finally {
-    buttons.forEach(button => {
-      button.disabled = false;
-    });
+    savedFeedback = JSON.parse(store.get("tttFeedback") || "[]");
+    if (!Array.isArray(savedFeedback)) savedFeedback = [];
+  } catch {
+    savedFeedback = [];
   }
-}
 
-$("#createBtn").addEventListener("click", () => {
-  lobbyDo(() =>
-    sb.rpc("create_room", {
-      p_public: false
-    })
-  );
+  savedFeedback.push(feedback);
+  store.set("tttFeedback", JSON.stringify(savedFeedback));
+
+  submitButton.disabled = true;
+  submitButton.textContent = "Submitted";
+  status.textContent = "Thank you! Your feedback has been saved on this device.";
+  status.className = "feedback-status success";
+  $("#feedbackForm").reset();
+
+  setTimeout(() => {
+    submitButton.disabled = false;
+    submitButton.textContent = "Submit feedback";
+  }, 1200);
 });
-
-$("#quickBtn").addEventListener("click", () => {
-  lobbyDo(() => sb.rpc("quick_match"));
-});
-
-$("#joinBtn").addEventListener("click", () => {
-  const code = $("#joinCode").value.trim().toUpperCase();
-
-  if (code.length !== 4) {
-    $("#lobbyMsg").textContent =
-      "Enter the 4-character room code.";
-    return;
-  }
-
-  lobbyDo(() =>
-    sb.rpc("join_room", {
-      p_code: code
-    })
-  );
-});
-
-function enterGame(currentGame) {
-  $("#lobby").hidden = true;
-  $("#gameArea").hidden = false;
-
-  $("#newBtn").textContent = "Leave game";
-  $("#againBtn").textContent = "Back to lobby";
-
-  finalShown = null;
-  oppCached = null;
-  oppName = "Opponent";
-  game = null;
-
-  watch(currentGame);
-  applyGame(currentGame);
-}
-
-async function applyGame(currentGame) {
-  if (
-    game &&
-    game.id === currentGame.id &&
-    currentGame.version < game.version
-  ) {
-    return;
-  }
-
-  game = currentGame;
-
-  const mark = currentGame.x_id === me.id ? "X" : "O";
-  const opponentId = mark === "X"
-    ? currentGame.o_id
-    : currentGame.x_id;
-
-  if (opponentId && opponentId !== oppCached) {
-    const { data, error } = await sb
-      .from("profiles")
-      .select("username")
-      .eq("id", opponentId)
-      .maybeSingle();
-
-    if (!error) {
-      oppName = (data && data.username) || "Opponent";
-    } else {
-      oppName = "Opponent";
-    }
-
-    oppCached = opponentId;
-
-    if (!game || game.id !== currentGame.id) {
-      return;
-    }
-  }
-
-  board = currentGame.board
-    .split("")
-    .map(character => character === "-" ? "" : character);
-
-  cells.forEach((cell, index) => {
-    cell.className = "cell";
-    cell.textContent = board[index];
-
-    if (board[index]) {
-      cell.dataset.mark = board[index];
-    } else {
-      delete cell.dataset.mark;
-    }
-
-    cell.disabled =
-      Boolean(board[index]) ||
-      currentGame.status !== "playing" ||
-      currentGame.turn !== mark;
-
-    cell.setAttribute(
-      "aria-label",
-      `Cell ${index + 1}, ${board[index] || "empty"}`
-    );
-  });
-
-  if (currentGame.win_line) {
-    currentGame.win_line.forEach(number => {
-      if (cells[number - 1]) {
-        cells[number - 1].classList.add("win");
-      }
-    });
-  }
-
-  if (currentGame.status === "waiting") {
-    setStatus("Waiting for an opponent… Room code: " + currentGame.code);
-  } else if (currentGame.status === "playing") {
-    setStatus(
-      currentGame.turn === mark
-        ? `Your turn — ${mark} (vs ${oppName})`
-        : `${oppName}’s turn…`
-    );
-  } else {
-    finishOnline(currentGame, mark);
-  }
-}
-
-function finishOnline(currentGame, mark) {
-  const draw = currentGame.winner === "draw";
-  const won = currentGame.winner === mark;
-
-  const title = draw
-    ? "It’s a draw!"
-    : won
-      ? "You win!"
-      : `${oppName} wins!`;
-
-  setStatus(title);
-
-  if (finalShown === currentGame.id) return;
-
-  finalShown = currentGame.id;
-
-  beep(draw ? 280 : won ? 660 : 200, 0.25);
-
-  endTimer = setTimeout(() => {
-    $("#mTitle").textContent = title;
-
-    $("#mText").textContent = draw
-      ? "A close match."
-      : won
-        ? `Nice game against ${oppName}!`
-        : "Better luck next round!";
-
-    $("#modal").hidden = false;
-    $("#againBtn").focus();
-  }, 600);
-}
-
-async function onlineMove(index) {
-  if (
-    !game ||
-    game.status !== "playing" ||
-    board[index]
-  ) {
-    return;
-  }
-
-  const mark = game.x_id === me.id ? "X" : "O";
-
-  if (game.turn !== mark) return;
-
-  beep(mark === "X" ? 520 : 360);
-
-  const { data, error } = await sb.rpc("make_move", {
-    p_id: game.id,
-    p_idx: index
-  });
-
-  if (error) {
-    toast(error.message);
-    return;
-  }
-
-  if (data) {
-    applyGame(data);
-  }
-}
-
-/* =========================================================
-   SOUND SETTINGS
-   ========================================================= */
-
-function updateSound() {
-  $("#soundLabel").textContent =
-    "Sound effects: " + (sound ? "on" : "off");
-
-  $("#sw").classList.toggle("on", sound);
-}
-
-$("#soundBtn").addEventListener("click", () => {
-  sound = !sound;
-
-  store.set("ttt-sound", sound ? "on" : "off");
-
-  updateSound();
-  beep(520);
-});
-
-/* =========================================================
-   THEMES
-   ========================================================= */
-
-function luma(hex) {
-  const number = parseInt(hex.slice(1), 16);
-
-  return (
-    0.299 * (number >> 16) +
-    0.587 * ((number >> 8) & 255) +
-    0.114 * (number & 255)
-  );
-}
-
-function applyTheme(name) {
-  const theme = THEMES[name];
-
-  if (!theme) return;
-
-  const root = document.documentElement;
-
-  for (const key in theme) {
-    root.style.setProperty("--" + key, theme[key]);
-  }
-
-  root.style.setProperty(
-    "--on-accent",
-    luma(theme.accent) > 150 ? "#20172E" : "#FFFFFF"
-  );
-
-  root.style.colorScheme =
-    luma(theme.page) < 128 ? "dark" : "light";
-
-  document.querySelectorAll(".theme").forEach(button => {
-    button.setAttribute(
-      "aria-pressed",
-      String(button.dataset.name === name)
-    );
-  });
-
-  store.set("ttt-theme", name);
-}
-
-for (const name in THEMES) {
-  const theme = THEMES[name];
-  const button = document.createElement("button");
-
-  button.type = "button";
-  button.className = "theme";
-  button.dataset.name = name;
-  button.setAttribute("aria-pressed", "false");
-
-  const swatches = document.createElement("i");
-
-  [theme.page, theme.card, theme.accent].forEach(color => {
-    const swatch = document.createElement("b");
-    swatch.style.background = color;
-    swatches.append(swatch);
-  });
-
-  const label = document.createElement("span");
-  label.textContent = name;
-
-  button.append(swatches, label);
-
-  button.addEventListener("click", () => {
-    applyTheme(name);
-    toast(name + " theme applied");
-  });
-
-  $("#themes").append(button);
-}
-
-/* =========================================================
-   START APPLICATION
-   ========================================================= */
-
-const savedTheme = store.get("ttt-theme");
-
-if (savedTheme && THEMES[savedTheme]) {
-  applyTheme(savedTheme);
-}
-
-updateSound();
-start();
-boot();
