@@ -1,6 +1,4 @@
-const API_URL = "https://tic-tac-toe-backend-1vkx.onrender.com";
-
-/* Suggestion box storage (Supabase). The publishable key is safe to put in
+/* Supabase stores game results and comments. The publishable key is safe to put in
    front-end code; row-level security decides what it is allowed to do. */
 const SUPABASE_URL = "https://ucydyufnxgcsetjasskl.supabase.co";
 const SUPABASE_ANON_KEY = "YOUR_SUPABASE_PUBLISHABLE_KEY";
@@ -407,14 +405,15 @@ async function fetchWithTimeout(url, options = {}, ms = 30000) {
 
 /* Game history
    Every finished game is written to a log on this device the moment it ends, so it
-   appears in the history instantly and survives a refresh. Each entry is then sent
-   to the backend exactly once; entries the server hasn't confirmed are shown as
-   "waiting to upload" and retried later. */
+   always appears in the history instantly and survives a refresh. Each result is also
+   saved once to the Supabase "game_results" table. The result's id is that table's
+   primary key, so a retry can never create a duplicate row. */
 
 const HISTORY_KEY = "tttHistory";
 const HISTORY_LIMIT = 100;
-let serverHistory = null;
 let syncPromise = null;
+let lastSyncFailed = false;
+let syncToastShown = false;
 
 function loadStoredHistory() {
   try {
@@ -430,6 +429,45 @@ let historyLog = loadStoredHistory();
 function persistHistory() {
   historyLog = historyLog.slice(-HISTORY_LIMIT);
   store.set(HISTORY_KEY, JSON.stringify(historyLog));
+}
+
+function getDeviceId() {
+  let id = store.get("tttDeviceId");
+
+  if (!id) {
+    id = window.crypto?.randomUUID
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    store.set("tttDeviceId", id);
+  }
+
+  return id;
+}
+
+const deviceId = getDeviceId();
+
+function supabaseReady() {
+  return Boolean(SUPABASE_ANON_KEY) && !SUPABASE_ANON_KEY.startsWith("YOUR_");
+}
+
+/* Adds one row to a Supabase table and returns the HTTP response */
+async function supabaseInsert(table, row) {
+  if (!supabaseReady()) {
+    console.warn("SUPABASE_ANON_KEY in game.js is still the placeholder. Paste your real publishable key.");
+    const error = new Error("Supabase key is not set");
+    error.setup = true;
+    throw error;
+  }
+
+  return fetchWithTimeout(`${SUPABASE_URL}/rest/v1/${table}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      apikey: SUPABASE_ANON_KEY,
+      Prefer: "return=minimal"
+    },
+    body: JSON.stringify(row)
+  }, 60000);
 }
 
 function resultLabel(result) {
@@ -453,13 +491,10 @@ function saveGameResult(result) {
   }
 
   renderHistory();              // show the new result immediately, no refresh needed
-
-  syncHistory().then(() => {
-    if (historyDrawer.classList.contains("open")) loadGameHistory();
-  });
+  syncHistory().then(() => renderHistory());
 }
 
-/* Uploads every unsynced entry once. Overlapping calls share one run, so an entry is never sent twice. */
+/* Uploads every unsynced result once. Overlapping calls share one run. */
 function syncHistory({ quiet = false } = {}) {
   if (syncPromise) return syncPromise;
 
@@ -472,25 +507,35 @@ function syncHistory({ quiet = false } = {}) {
       tried.add(entry.id);
 
       try {
-        const response = await fetchWithTimeout(`${API_URL}/api/save-game`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ result: entry.result })
-        }, 60000);
+        const response = await supabaseInsert("game_results", {
+          id: entry.id,
+          device_id: deviceId,
+          result: entry.result,
+          created_at: entry.created_at
+        });
 
-        if (!response.ok) throw new Error("Could not save game");
+        // 409 means this id is already stored, which is exactly what we want
+        if (!response.ok && response.status !== 409) {
+          if ([401, 403, 404].includes(response.status)) {
+            console.warn("Game history: Supabase refused the result. Check the key in game.js and that supabase-setup.sql was run.");
+          }
+          throw new Error(`Could not save game (${response.status})`);
+        }
 
         entry.synced = true;
         persistHistory();
       } catch (error) {
-        console.error("Game history save failed:", error);
+        console.error("Game history upload failed:", error);
         failed = true;
         break;
       }
     }
 
-    if (failed && !quiet) {
-      showToast("Result saved on this device. It will upload when the server responds.");
+    lastSyncFailed = failed;
+
+    if (failed && !quiet && !syncToastShown) {
+      syncToastShown = true;
+      showToast("Result saved on this device. It will upload to the server later.");
     }
 
     return failed;
@@ -676,37 +721,28 @@ on("#resetThemeBtn", "click", () => setTheme("chocolate"));
 
 /* Game history */
 
-function newestFirst(records) {
-  const times = records.map(record => Date.parse(record.created_at));
-  if (times.some(Number.isNaN)) return records;   // can't sort reliably, keep the server's order
-
-  return records
-    .map((record, index) => ({ record, time: times[index] }))
-    .sort((a, b) => b.time - a.time)
-    .map(item => item.record);
-}
-
-function renderHistory(note = "") {
+function renderHistory() {
   const list = $("#historyList");
   const historyStatus = $("#historyStatus");
   if (!list || !historyStatus) return;
 
-  const pending = historyLog.filter(entry => !entry.synced).reverse();
-  const records = serverHistory
-    ? [...pending, ...newestFirst(serverHistory)]
-    : [...historyLog].reverse();
-
+  const records = [...historyLog].reverse();
   list.replaceChildren();
 
   if (!records.length) {
-    historyStatus.textContent =
-      note || "No saved games yet. Play a game to see results here.";
+    historyStatus.textContent = "No saved games yet. Play a game to see results here.";
     return;
   }
 
+  const pending = records.filter(record => !record.synced).length;
   let summary = `${records.length} saved result(s)`;
-  if (pending.length) summary += ` · ${pending.length} waiting to upload`;
-  historyStatus.textContent = note ? `${summary}. ${note}` : summary;
+
+  if (pending) {
+    summary += ` · ${pending} waiting to upload`;
+    if (lastSyncFailed) summary += ". Couldn't reach the server yet.";
+  }
+
+  historyStatus.textContent = summary;
 
   records.forEach(record => {
     const item = document.createElement("li");
@@ -718,7 +754,7 @@ function renderHistory(note = "") {
     const when = record.created_at
       ? new Date(record.created_at).toLocaleString()
       : "Date unavailable";
-    details.textContent = record.synced === false ? `${when} · waiting to upload` : when;
+    details.textContent = record.synced ? when : `${when} · waiting to upload`;
 
     item.append(title, details);
     list.append(item);
@@ -726,32 +762,12 @@ function renderHistory(note = "") {
 }
 
 async function loadGameHistory() {
-  renderHistory();                                    // this device's results appear instantly
-  $("#historyStatus").textContent += " Updating…";
+  renderHistory();                                   // results appear instantly
 
-  try {
-    await syncHistory({ quiet: true });               // upload anything still pending first
-
-    const response = await fetchWithTimeout(`${API_URL}/api/game-history`);
-    if (!response.ok) throw new Error("History request failed");
-
-    const data = await response.json();
-    serverHistory = Array.isArray(data)
-      ? data
-      : Array.isArray(data.history)
-        ? data.history
-        : Array.isArray(data.data)
-          ? data.data
-          : [];
-
+  if (historyLog.some(entry => !entry.synced)) {
+    $("#historyStatus").textContent += " Uploading…";
+    await syncHistory({ quiet: true });              // retry anything not yet uploaded
     renderHistory();
-  } catch (error) {
-    console.error("History loading failed:", error);
-    renderHistory(
-      error.name === "AbortError"
-        ? "The server took too long to respond, so results saved on this device are shown."
-        : "Could not reach the server, so results saved on this device are shown."
-    );
   }
 }
 
@@ -790,24 +806,10 @@ function writeFeedbackQueue(queue) {
 /* Returns normally when the server accepted OR permanently rejected the message
    (retrying a rejected one would never help). Throws when it should be retried. */
 async function postFeedback(entry) {
-  if (!SUPABASE_ANON_KEY || SUPABASE_ANON_KEY.startsWith("YOUR_")) {
-    console.warn("Comments box: SUPABASE_ANON_KEY in game.js is still the placeholder. Paste your real publishable key.");
-    const error = new Error("Supabase key is not set");
-    error.setup = true;
-    throw error;
-  }
-
-  const response = await fetchWithTimeout(`${SUPABASE_URL}/rest/v1/suggestions`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      apikey: SUPABASE_ANON_KEY,
-      Prefer: "return=minimal"
-    },
-    body: JSON.stringify({ message: entry.message })
-  });
+  const response = await supabaseInsert("suggestions", { message: entry.message });
 
   if ([400, 413, 422].includes(response.status)) return;
+
   if (!response.ok) {
     const error = new Error(`Feedback request failed (${response.status})`);
     // 401/403 = wrong key or missing insert policy, 404 = the suggestions table doesn't exist yet
