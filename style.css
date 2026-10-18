@@ -420,25 +420,3 @@ button.setting-row:hover { background: color-mix(in srgb, var(--accent) 10%, tra
   .icon-btn { min-height: 40px; padding: 8px 10px; }
   .menu-btn span { display: none; }
   main { width: calc(100% - 20px); }
-  .layout-canvas { min-height: 0; padding: 18px 14px; border-radius: 22px; }
-  .design-item { margin-bottom: 20px; }
-  .mode-btn { min-height: 108px; padding: 12px 6px; }
-  .mode-btn small { font-size: .68rem; }
-  .board-section { width: 100%; }
-  .board { gap: 7px; }
-  .cell { border-radius: 14px; }
-  .score-section { gap: 7px; margin-top: 22px; }
-  .score-card { padding: 12px 5px; }
-  .score-card span { font-size: .68rem; }
-  .score-card strong { font-size: 1.5rem; }
-  .settings-drawer { padding: 20px 17px; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
-    scroll-behavior: auto !important;
-    animation-duration: .01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: .01ms !important;
-  }
-}
