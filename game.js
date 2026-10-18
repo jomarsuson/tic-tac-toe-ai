@@ -1,5 +1,10 @@
 const API_URL = "https://tic-tac-toe-backend-1vkx.onrender.com";
 
+/* Suggestion box storage (Supabase). The publishable key is safe to put in
+   front-end code; row-level security decides what it is allowed to do. */
+const SUPABASE_URL = "https://ucydyufnxgcsetjasskl.supabase.co";
+const SUPABASE_ANON_KEY = "YOUR_SUPABASE_PUBLISHABLE_KEY";
+
 const $ = selector => document.querySelector(selector);
 const $$ = selector => [...document.querySelectorAll(selector)];
 
@@ -430,7 +435,7 @@ async function saveGameResult(result) {
 
 /* Settings drawers */
 
-const drawers = [settingsDrawer, historyDrawer, feedbackDrawer];
+const drawers = [settingsDrawer, historyDrawer, feedbackDrawer].filter(Boolean);
 let lastFocus = null;
 
 function openDrawer(drawer) {
@@ -691,9 +696,17 @@ function writeFeedbackQueue(queue) {
 /* Returns normally when the server accepted OR permanently rejected the entry
    (retrying a rejected entry would never help). Throws when it should be retried. */
 async function postFeedback(entry) {
-  const response = await fetchWithTimeout(`${API_URL}/api/suggestions`, {
+  if (!SUPABASE_ANON_KEY || SUPABASE_ANON_KEY.startsWith("YOUR_")) {
+    throw new Error("Supabase key is not set in game.js");
+  }
+
+  const response = await fetchWithTimeout(`${SUPABASE_URL}/rest/v1/suggestions`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      apikey: SUPABASE_ANON_KEY,
+      Prefer: "return=minimal"
+    },
     body: JSON.stringify(entry)
   });
 
