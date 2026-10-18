@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -10,30 +9,18 @@
 </head>
 <body>
   <header class="topbar">
-    <button class="icon-btn" id="backBtn" type="button">← Back</button>
+    <span aria-hidden="true"></span>
     <div class="brand">
       <h1>Tic-Tac-Toe</h1>
       <p>THINK · PLAY · WIN</p>
     </div>
     <button class="icon-btn menu-btn" id="menuBtn" type="button"
-      aria-label="Open settings" aria-expanded="false">☰ Menu</button>
+      aria-label="Open settings" aria-expanded="false">☰ <span>Menu</span></button>
   </header>
 
   <main>
-    <div class="edit-toolbar" id="editToolbar" hidden>
-      <div>
-        <strong>Customize your layout</strong>
-        <p>Drag sections to rearrange them.</p>
-      </div>
-      <div class="toolbar-actions">
-        <button class="secondary-btn" id="resetLayoutBtn" type="button">Reset layout</button>
-        <button class="primary-btn" id="saveLayoutBtn" type="button">Save layout</button>
-        <button class="secondary-btn" id="doneLayoutBtn" type="button">Done</button>
-      </div>
-    </div>
-
     <div class="layout-canvas" id="layoutCanvas">
-      <section class="mode-section design-item" data-layout="mode">
+      <section class="mode-section design-item">
         <div class="section-heading">
           <h2>Choose your game</h2>
           <p>Play against the computer or challenge a friend.</p>
@@ -52,11 +39,11 @@
         </div>
       </section>
 
-      <section class="status-section design-item" data-layout="status" aria-live="polite">
-        <p id="status">Press Start Game to begin!</p>
+      <section class="status-section design-item" aria-live="polite">
+        <p id="status">Your turn — X</p>
       </section>
 
-      <section class="board-section design-item" data-layout="board" aria-label="Game board">
+      <section class="board-section design-item" aria-label="Game board">
         <div class="board" role="group" aria-label="Tic-Tac-Toe board">
           <button class="cell" type="button" data-index="0" aria-label="Cell 1"></button>
           <button class="cell" type="button" data-index="1" aria-label="Cell 2"></button>
@@ -70,14 +57,14 @@
         </div>
       </section>
 
-      <section class="controls-section design-item" data-layout="controls">
+      <section class="controls-section design-item">
         <div class="game-buttons">
           <button class="primary-btn" id="startBtn" type="button">Start game</button>
           <button class="secondary-btn" id="restartBtn" type="button">Restart round</button>
         </div>
       </section>
 
-      <section class="score-section design-item" data-layout="score" aria-label="Scoreboard">
+      <section class="score-section design-item" aria-label="Scoreboard">
         <div class="score-card">
           <span>Player X</span>
           <strong id="playerWins">0</strong>
@@ -102,30 +89,16 @@
         <h2>Settings</h2>
         <p>Customize your game.</p>
       </div>
-      <button class="icon-btn" id="closeMenuBtn" type="button">✕</button>
+      <button class="icon-btn" id="closeMenuBtn" type="button" aria-label="Close settings">✕</button>
     </div>
 
     <section class="settings-group">
       <h3>GAME</h3>
-      <button class="setting-row" id="gameSettingsBtn" type="button">
-        <span class="setting-icon">🎮</span>
-        <span class="setting-copy">
-          <strong>Game mode</strong>
-          <small>Choose AI or two-player mode</small>
-        </span>
-      </button>
       <button class="setting-row" id="historyMenuBtn" type="button">
         <span class="setting-icon">🕘</span>
         <span class="setting-copy">
           <strong>Game history</strong>
           <small>View saved results</small>
-        </span>
-      </button>
-      <button class="setting-row" id="customizeLayoutBtn" type="button">
-        <span class="setting-icon">↔️</span>
-        <span class="setting-copy">
-          <strong>Customize layout</strong>
-          <small>Rearrange sections</small>
         </span>
       </button>
       <button class="setting-row" id="soundBtn" type="button">
@@ -143,23 +116,23 @@
       <p class="settings-description">Choose a theme or customize your colors.</p>
 
       <div class="theme-grid">
-        <button class="theme-option" type="button" data-theme="chocolate">
+        <button class="theme-option" type="button" data-theme="chocolate" aria-pressed="false">
           <span class="theme-swatches"><i style="background:#F5EBDD"></i><i style="background:#FFF9F0"></i><i style="background:#80543D"></i></span>
           <span>Chocolate</span><b class="theme-check">✓</b>
         </button>
-        <button class="theme-option" type="button" data-theme="dark">
+        <button class="theme-option" type="button" data-theme="dark" aria-pressed="false">
           <span class="theme-swatches"><i style="background:#171717"></i><i style="background:#262626"></i><i style="background:#C59A6B"></i></span>
           <span>Dark</span><b class="theme-check">✓</b>
         </button>
-        <button class="theme-option" type="button" data-theme="ocean">
+        <button class="theme-option" type="button" data-theme="ocean" aria-pressed="false">
           <span class="theme-swatches"><i style="background:#EAF3FA"></i><i style="background:#FFFFFF"></i><i style="background:#246B9E"></i></span>
           <span>Ocean</span><b class="theme-check">✓</b>
         </button>
-        <button class="theme-option" type="button" data-theme="forest">
+        <button class="theme-option" type="button" data-theme="forest" aria-pressed="false">
           <span class="theme-swatches"><i style="background:#EAF1E8"></i><i style="background:#FFFFFF"></i><i style="background:#386641"></i></span>
           <span>Forest</span><b class="theme-check">✓</b>
         </button>
-        <button class="theme-option" type="button" data-theme="purple">
+        <button class="theme-option" type="button" data-theme="purple" aria-pressed="false">
           <span class="theme-swatches"><i style="background:#211A35"></i><i style="background:#302644"></i><i style="background:#A78BFA"></i></span>
           <span>Purple</span><b class="theme-check">✓</b>
         </button>
@@ -187,7 +160,7 @@
         <h2>Game history</h2>
         <p>Your saved game results.</p>
       </div>
-      <button class="icon-btn" id="closeHistoryBtn" type="button">✕</button>
+      <button class="icon-btn" id="closeHistoryBtn" type="button" aria-label="Close history">✕</button>
     </div>
     <p class="history-status" id="historyStatus">Open history to load saved games.</p>
     <ul class="history-list" id="historyList"></ul>
