@@ -791,8 +791,10 @@ function writeFeedbackQueue(queue) {
    (retrying a rejected one would never help). Throws when it should be retried. */
 async function postFeedback(entry) {
   if (!SUPABASE_ANON_KEY || SUPABASE_ANON_KEY.startsWith("YOUR_")) {
-    console.warn("Comments box: set SUPABASE_ANON_KEY in game.js to send messages.");
-    throw new Error("Supabase key is not set");
+    console.warn("Comments box: SUPABASE_ANON_KEY in game.js is still the placeholder. Paste your real publishable key.");
+    const error = new Error("Supabase key is not set");
+    error.setup = true;
+    throw error;
   }
 
   const response = await fetchWithTimeout(`${SUPABASE_URL}/rest/v1/suggestions`, {
@@ -806,7 +808,15 @@ async function postFeedback(entry) {
   });
 
   if ([400, 413, 422].includes(response.status)) return;
-  if (!response.ok) throw new Error(`Feedback request failed (${response.status})`);
+  if (!response.ok) {
+    const error = new Error(`Feedback request failed (${response.status})`);
+    // 401/403 = wrong key or missing insert policy, 404 = the suggestions table doesn't exist yet
+    error.setup = [401, 403, 404].includes(response.status);
+    if (error.setup) {
+      console.warn("Comments box: Supabase refused the message. Check the key in game.js and that supabase-setup.sql was run.");
+    }
+    throw error;
+  }
 }
 
 /* Messages that couldn't be delivered earlier are retried when the box is opened */
@@ -872,7 +882,9 @@ feedbackForm?.addEventListener("submit", async event => {
     console.error("Feedback send failed:", error);
     writeFeedbackQueue([...readFeedbackQueue(), entry]);
     setFeedbackStatus(
-      "Couldn't reach the server. Your message is saved on this device and will be sent the next time you open this box.",
+      error.setup
+        ? "Comments can't be received right now. Your message is saved on this device and will be sent once this is fixed."
+        : "Couldn't reach the server. Your message is saved on this device and will be sent the next time you open this box.",
       "error"
     );
   } finally {
