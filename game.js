@@ -1,7 +1,8 @@
+
 const API_URL = "https://tic-tac-toe-backend-1vkx.onrender.com";
 
-const $ = (selector) => document.querySelector(selector);
-const $$ = (selector) => [...document.querySelectorAll(selector)];
+const $ = selector => document.querySelector(selector);
+const $$ = selector => [...document.querySelectorAll(selector)];
 
 const canvas = $("#layoutCanvas");
 const cells = $$(".cell");
@@ -71,7 +72,9 @@ function playSound(frequency = 440, duration = 0.09) {
   if (!soundOn) return;
 
   try {
-    audioContext ||= new (window.AudioContext || window.webkitAudioContext)();
+    audioContext ||= new (
+      window.AudioContext || window.webkitAudioContext
+    )();
 
     if (audioContext.state === "suspended") {
       audioContext.resume();
@@ -99,14 +102,15 @@ function playSound(frequency = 440, duration = 0.09) {
 
 function setMode(newMode) {
   mode = newMode;
-
   $("#aiModeBtn").classList.toggle("active", mode === "ai");
   $("#twoPlayerBtn").classList.toggle("active", mode === "two");
-
   startGame();
 }
 
 function startGame() {
+  $("#victoryOverlay")?.remove();
+  cells.forEach(cell => cell.classList.remove("winning-cell"));
+
   board = Array(9).fill("");
   gameActive = true;
   aiThinking = false;
@@ -135,6 +139,77 @@ function checkWinner(position) {
   return position.every(Boolean) ? "draw" : null;
 }
 
+function getWinningLine(position) {
+  return wins.find(([a, b, c]) =>
+    position[a] &&
+    position[a] === position[b] &&
+    position[b] === position[c]
+  ) || [];
+}
+
+function showVictoryEffect(result) {
+  $("#victoryOverlay")?.remove();
+
+  const title = result === "draw"
+    ? "IT'S A DRAW!"
+    : result === "X"
+      ? (mode === "ai" ? "YOU WIN!" : "PLAYER X WINS!")
+      : (mode === "ai" ? "AI WINS!" : "PLAYER O WINS!");
+
+  const overlay = document.createElement("div");
+  overlay.id = "victoryOverlay";
+  overlay.className =
+    `victory-overlay ${result === "draw" ? "is-draw" : "is-win"}`;
+
+  overlay.setAttribute("role", "dialog");
+  overlay.setAttribute("aria-modal", "true");
+  overlay.setAttribute("aria-label", title);
+
+  const panel = document.createElement("div");
+  panel.className = "victory-panel";
+
+  const heading = document.createElement("h2");
+  heading.textContent = title;
+
+  const message = document.createElement("p");
+  message.textContent = result === "draw"
+    ? "A close match. Try again!"
+    : result === "X"
+      ? "Great move. You played well!"
+      : "Better luck next round!";
+
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "victory-play-again";
+  button.textContent = "PLAY AGAIN";
+
+  button.addEventListener("click", () => {
+    overlay.remove();
+    startGame();
+    playSound(500, 0.12);
+  });
+
+  panel.append(heading, message, button);
+  overlay.append(panel);
+  document.body.append(overlay);
+
+  if (result !== "draw") {
+    for (let i = 0; i < 48; i++) {
+      const bit = document.createElement("span");
+      bit.className = "confetti-piece";
+      bit.style.left = `${Math.random() * 100}%`;
+      bit.style.animationDelay = `${Math.random() * 0.7}s`;
+      bit.style.setProperty(
+        "--confetti-rotate",
+        `${Math.random() * 720 - 360}deg`
+      );
+      overlay.append(bit);
+    }
+  }
+
+  button.focus();
+}
+
 function updateCell(index, mark) {
   board[index] = mark;
   cells[index].textContent = mark;
@@ -154,8 +229,8 @@ function handleCellClick(event) {
     if (finishIfOver()) return;
 
     aiThinking = true;
-    cells.forEach((cell, i) => {
-      cell.disabled = Boolean(board[i]) || true;
+    cells.forEach(cell => {
+      cell.disabled = true;
     });
 
     setStatus("AI is thinking...");
@@ -174,11 +249,12 @@ function handleCellClick(event) {
         cell.disabled = !gameActive || Boolean(board[i]);
       });
 
-      if (!finishIfOver()) setStatus("Your turn — X");
+      if (!finishIfOver()) {
+        setStatus("Your turn — X");
+      }
     }, 450);
   } else {
     const mark = board.filter(Boolean).length % 2 === 0 ? "X" : "O";
-
     updateCell(index, mark);
 
     if (!finishIfOver()) {
@@ -243,7 +319,6 @@ function getBestMove(position) {
 
 function finishIfOver() {
   const result = checkWinner(board);
-
   if (!result) return false;
 
   gameActive = false;
@@ -258,10 +333,16 @@ function finishIfOver() {
     scores.player++;
     setStatus(mode === "ai" ? "You win!" : "Player X wins!");
     playSound(660, 0.2);
+    getWinningLine(board).forEach(index =>
+      cells[index]?.classList.add("winning-cell")
+    );
   } else {
     scores.ai++;
     setStatus(mode === "ai" ? "AI wins!" : "Player O wins!");
     playSound(200, 0.2);
+    getWinningLine(board).forEach(index =>
+      cells[index]?.classList.add("winning-cell")
+    );
   }
 
   $("#playerWins").textContent = scores.player;
@@ -269,6 +350,7 @@ function finishIfOver() {
   $("#draws").textContent = scores.draws;
 
   saveGameResult(result);
+  setTimeout(() => showVictoryEffect(result), 300);
   return true;
 }
 
@@ -289,10 +371,7 @@ async function saveGameResult(result) {
       body: JSON.stringify({ result: resultName })
     });
 
-    if (!response.ok) {
-      throw new Error("Could not save game");
-    }
-
+    if (!response.ok) throw new Error("Could not save game");
     loadGameHistory();
   } catch (error) {
     console.error("Game history save failed:", error);
@@ -300,11 +379,10 @@ async function saveGameResult(result) {
   }
 }
 
-// Settings drawer
+/* Settings drawers */
 
 function openDrawer(drawer) {
   closeDrawers();
-
   drawer.classList.add("open");
   drawer.setAttribute("aria-hidden", "false");
   backdrop.classList.add("open");
@@ -329,12 +407,8 @@ $("#closeMenuBtn").addEventListener("click", closeDrawers);
 $("#closeHistoryBtn").addEventListener("click", closeDrawers);
 backdrop.addEventListener("click", closeDrawers);
 
-$("#gameSettingsBtn").addEventListener("click", () => {
-  closeDrawers();
-  document.querySelector(".mode-section").scrollIntoView({
-    behavior: "smooth",
-    block: "center"
-  });
+document.addEventListener("keydown", event => {
+  if (event.key === "Escape") closeDrawers();
 });
 
 $("#historyMenuBtn").addEventListener("click", () => {
@@ -342,59 +416,57 @@ $("#historyMenuBtn").addEventListener("click", () => {
   loadGameHistory();
 });
 
+$("#gameSettingsBtn").addEventListener("click", () => {
+  closeDrawers();
+  showToast("Choose a game mode using the buttons on the board.");
+});
+
 $("#aiModeBtn").addEventListener("click", () => setMode("ai"));
 $("#twoPlayerBtn").addEventListener("click", () => setMode("two"));
 
 $("#startBtn").addEventListener("click", () => {
   startGame();
-  playSound(500);
+  playSound(500, 0.12);
 });
 
 $("#restartBtn").addEventListener("click", () => {
   startGame();
-  playSound(420);
+  playSound(380, 0.1);
 });
 
-cells.forEach(cell => cell.addEventListener("click", handleCellClick));
+$("#backBtn").addEventListener("click", () => {
+  closeDrawers();
+  showToast("You're already on the game screen.");
+});
+
+cells.forEach(cell => {
+  cell.addEventListener("click", handleCellClick);
+});
+
+/* Sound settings */
+
+function updateSoundUI() {
+  $("#soundIcon").textContent = soundOn ? "🔊" : "🔇";
+  $("#soundStatus").textContent = soundOn ? "Sound is on" : "Sound is off";
+  $("#soundSwitch").classList.toggle("on", soundOn);
+}
 
 $("#soundBtn").addEventListener("click", () => {
   soundOn = !soundOn;
   localStorage.setItem("tttSound", String(soundOn));
   updateSoundUI();
 
-  if (soundOn) playSound();
-  showToast(soundOn ? "Sound enabled" : "Sound muted");
+  if (soundOn) playSound(520, 0.1);
 });
 
-function updateSoundUI() {
-  $("#soundStatus").textContent = soundOn ? "Sound is on" : "Sound is off";
-  $("#soundIcon").textContent = soundOn ? "🔊" : "🔇";
-  $("#soundSwitch").classList.toggle("on", soundOn);
-}
-
-$("#backBtn").addEventListener("click", () => {
-  if (canvas.classList.contains("editing")) {
-    exitLayoutEditor();
-  } else if (settingsDrawer.classList.contains("open") ||
-             historyDrawer.classList.contains("open")) {
-    closeDrawers();
-  } else {
-    showToast("You're on the main game screen.");
-  }
-});
-
-// Themes and custom colors
+/* Themes and custom colors */
 
 function applyTheme(colors) {
   const root = document.documentElement;
 
-  root.style.setProperty("--page", colors.page);
-  root.style.setProperty("--card", colors.card);
-  root.style.setProperty("--accent", colors.accent);
-  root.style.setProperty("--text", colors.text);
-  root.style.setProperty("--muted", colors.muted);
-  root.style.setProperty("--border", colors.border);
-  root.style.setProperty("--cell", colors.cell);
+  Object.entries(colors).forEach(([key, value]) => {
+    root.style.setProperty(`--${key}`, value);
+  });
 }
 
 function setTheme(name) {
@@ -402,7 +474,6 @@ function setTheme(name) {
   if (!colors) return;
 
   applyTheme(colors);
-
   localStorage.setItem("tttTheme", name);
   localStorage.setItem("tttCustomColors", JSON.stringify(colors));
 
@@ -414,12 +485,13 @@ function setTheme(name) {
   $("#accentColor").value = colors.accent;
   $("#cardColor").value = colors.card;
 
-  showToast(`${$(`.theme-option[data-theme="${name}"]`).querySelectorAll("span")[1].textContent} theme applied`);
+  showToast(`${name.charAt(0).toUpperCase() + name.slice(1)} theme applied`);
 }
 
 function applyCustomColors() {
   const previous = JSON.parse(
-    localStorage.getItem("tttCustomColors") || JSON.stringify(themes.chocolate)
+    localStorage.getItem("tttCustomColors") ||
+    JSON.stringify(themes.chocolate)
   );
 
   const colors = {
@@ -445,11 +517,9 @@ $$(".theme-option").forEach(button => {
   $(`#${id}`).addEventListener("input", applyCustomColors);
 });
 
-$("#resetThemeBtn").addEventListener("click", () => {
-  setTheme("chocolate");
-});
+$("#resetThemeBtn").addEventListener("click", () => setTheme("chocolate"));
 
-// Game history
+/* Game history */
 
 async function loadGameHistory() {
   const list = $("#historyList");
@@ -460,10 +530,7 @@ async function loadGameHistory() {
 
   try {
     const response = await fetch(`${API_URL}/api/game-history`);
-
-    if (!response.ok) {
-      throw new Error("History request failed");
-    }
+    if (!response.ok) throw new Error("History request failed");
 
     const data = await response.json();
     const records = Array.isArray(data)
@@ -475,7 +542,8 @@ async function loadGameHistory() {
           : [];
 
     if (!records.length) {
-      historyStatus.textContent = "No saved games yet. Play a game to see results here.";
+      historyStatus.textContent =
+        "No saved games yet. Play a game to see results here.";
       return;
     }
 
@@ -488,23 +556,23 @@ async function loadGameHistory() {
 
       title.textContent = record.result || "Game result";
 
-      const dateValue = record.created_at
+      details.textContent = record.created_at
         ? new Date(record.created_at).toLocaleString()
         : "Date unavailable";
 
-      details.textContent = dateValue;
       item.append(title, details);
       list.append(item);
     });
   } catch (error) {
     console.error("History loading failed:", error);
-    historyStatus.textContent = "Could not load history. Check your backend connection.";
+    historyStatus.textContent =
+      "Could not load history. Check your backend connection.";
   }
 }
 
 $("#refreshHistoryBtn").addEventListener("click", loadGameHistory);
 
-// Drag-and-drop layout editor
+/* Layout editor */
 
 const defaultLayout = {
   mode:     { x: 5, y: 2,  w: 90, h: 19 },
@@ -573,20 +641,28 @@ function enterLayoutEditor() {
       handle.className = "resize-handle";
       handle.type = "button";
       handle.setAttribute("aria-label", `Resize ${item.dataset.layout}`);
+
       handle.addEventListener("pointerdown", event => {
         beginDrag(event, item, true);
       });
+
       item.append(handle);
     }
 
-    item.addEventListener("pointerdown", item._layoutPointerDown ||= event => {
-      if (event.target.closest(".resize-handle")) return;
-      if (event.target.closest("button, input, select")) {
-        if (event.target.closest(".cell")) return;
-        if (!event.target.closest(".mode-section")) return;
-      }
-      beginDrag(event, item, false);
-    });
+    if (!item._layoutPointerDown) {
+      item._layoutPointerDown = event => {
+        if (event.target.closest(".resize-handle")) return;
+
+        if (event.target.closest("button, input, select")) {
+          if (event.target.closest(".cell")) return;
+          if (!event.target.closest(".mode-section")) return;
+        }
+
+        beginDrag(event, item, false);
+      };
+
+      item.addEventListener("pointerdown", item._layoutPointerDown);
+    }
   });
 
   showToast("Layout editor enabled. Drag a section to move it.");
@@ -630,22 +706,14 @@ document.addEventListener("pointermove", event => {
   if (d.resizing) {
     const maxW = canvasRect.width - d.x;
     const maxH = canvasRect.height - d.y;
-
     const width = Math.max(100, Math.min(maxW, d.w + dx));
     const height = Math.max(70, Math.min(maxH, d.h + dy));
 
     d.item.style.width = `${(width / canvasRect.width) * 100}%`;
     d.item.style.height = `${(height / canvasRect.height) * 100}%`;
   } else {
-    const x = Math.max(0, Math.min(
-      canvasRect.width - d.w,
-      d.x + dx
-    ));
-
-    const y = Math.max(0, Math.min(
-      canvasRect.height - d.h,
-      d.y + dy
-    ));
+    const x = Math.max(0, Math.min(canvasRect.width - d.w, d.x + dx));
+    const y = Math.max(0, Math.min(canvasRect.height - d.h, d.y + dy));
 
     d.item.style.left = `${(x / canvasRect.width) * 100}%`;
     d.item.style.top = `${(y / canvasRect.height) * 100}%`;
@@ -684,12 +752,11 @@ function exitLayoutEditor() {
   editToolbar.hidden = true;
 
   $$(".resize-handle").forEach(handle => handle.remove());
-  $$(".design-item").forEach(item => {
-    item.classList.remove("dragging");
-  });
+  $$(".design-item").forEach(item => item.classList.remove("dragging"));
 
   if (!layoutSaved) {
     const stored = localStorage.getItem("tttCustomLayout");
+
     if (stored) {
       try {
         layout = JSON.parse(stored);
@@ -699,9 +766,7 @@ function exitLayoutEditor() {
       }
     } else {
       canvas.classList.remove("custom-layout");
-      $$(".design-item").forEach(item => {
-        item.removeAttribute("style");
-      });
+      $$(".design-item").forEach(item => item.removeAttribute("style"));
     }
   }
 
@@ -728,7 +793,7 @@ $("#saveLayoutBtn").addEventListener("click", saveLayout);
 $("#doneLayoutBtn").addEventListener("click", exitLayoutEditor);
 $("#resetLayoutBtn").addEventListener("click", resetLayout);
 
-// Restore saved preferences
+/* Restore saved preferences */
 
 function restorePreferences() {
   const savedTheme = localStorage.getItem("tttTheme") || "chocolate";
