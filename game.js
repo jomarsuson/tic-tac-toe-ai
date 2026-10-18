@@ -1,26 +1,32 @@
-
 const API_URL = "https://tic-tac-toe-backend-1vkx.onrender.com";
 
 const $ = selector => document.querySelector(selector);
 const $$ = selector => [...document.querySelectorAll(selector)];
 
-const canvas = $("#layoutCanvas");
+/* Safe storage (won't crash in private mode or when storage is blocked) */
+const store = {
+  get: key => { try { return localStorage.getItem(key); } catch { return null; } },
+  set: (key, value) => { try { localStorage.setItem(key, value); } catch { /* ignore */ } },
+  remove: key => { try { localStorage.removeItem(key); } catch { /* ignore */ } }
+};
+
 const cells = $$(".cell");
 const statusText = $("#status");
 const settingsDrawer = $("#settingsDrawer");
 const historyDrawer = $("#historyDrawer");
 const backdrop = $("#drawerBackdrop");
-const editToolbar = $("#editToolbar");
 
 let board = Array(9).fill("");
 let gameActive = false;
 let aiThinking = false;
 let resultSaved = false;
 let mode = "ai";
-let soundOn = localStorage.getItem("tttSound") !== "false";
+let soundOn = store.get("tttSound") !== "false";
 let scores = { player: 0, ai: 0, draws: 0 };
 let audioContext = null;
 let toastTimer;
+let aiTimer = null;
+let overlayTimer = null;
 
 const wins = [
   [0, 1, 2], [3, 4, 5], [6, 7, 8],
@@ -108,6 +114,10 @@ function setMode(newMode) {
 }
 
 function startGame() {
+  // Cancel anything still pending from the previous round
+  clearTimeout(aiTimer);
+  clearTimeout(overlayTimer);
+
   $("#victoryOverlay")?.remove();
   cells.forEach(cell => cell.classList.remove("winning-cell"));
 
@@ -119,6 +129,7 @@ function startGame() {
   cells.forEach((cell, index) => {
     cell.textContent = "";
     cell.disabled = false;
+    delete cell.dataset.mark;
     cell.setAttribute("aria-label", `Cell ${index + 1}, empty`);
   });
 
@@ -174,9 +185,11 @@ function showVictoryEffect(result) {
   const message = document.createElement("p");
   message.textContent = result === "draw"
     ? "A close match. Try again!"
-    : result === "X"
-      ? "Great move. You played well!"
-      : "Better luck next round!";
+    : mode === "two"
+      ? "Great game, both of you!"
+      : result === "X"
+        ? "Great move. You played well!"
+        : "Better luck next round!";
 
   const button = document.createElement("button");
   button.type = "button";
@@ -213,6 +226,7 @@ function showVictoryEffect(result) {
 function updateCell(index, mark) {
   board[index] = mark;
   cells[index].textContent = mark;
+  cells[index].dataset.mark = mark;
   cells[index].setAttribute("aria-label", `Cell ${index + 1}, ${mark}`);
   cells[index].disabled = true;
   playSound(mark === "X" ? 520 : 360);
@@ -235,7 +249,7 @@ function handleCellClick(event) {
 
     setStatus("AI is thinking...");
 
-    setTimeout(() => {
+    aiTimer = setTimeout(() => {
       if (!gameActive) return;
 
       const move = getBestMove(board);
@@ -350,29 +364,47 @@ function finishIfOver() {
   $("#draws").textContent = scores.draws;
 
   saveGameResult(result);
-  setTimeout(() => showVictoryEffect(result), 300);
+  overlayTimer = setTimeout(() => showVictoryEffect(result), 300);
   return true;
+}
+
+/* Backend requests with a timeout (free hosting can take a while to wake up) */
+
+async function fetchWithTimeout(url, options = {}, ms = 30000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ms);
+
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 async function saveGameResult(result) {
   if (resultSaved) return;
   resultSaved = true;
 
-  const resultName = result === "draw"
-    ? "Draw"
-    : result === "X"
-      ? "Player Wins"
-      : "AI Wins";
+  let resultName;
+
+  if (result === "draw") {
+    resultName = "Draw";
+  } else if (mode === "two") {
+    resultName = result === "X" ? "Player X Wins" : "Player O Wins";
+  } else {
+    resultName = result === "X" ? "Player Wins" : "AI Wins";
+  }
 
   try {
-    const response = await fetch(`${API_URL}/api/save-game`, {
+    const response = await fetchWithTimeout(`${API_URL}/api/save-game`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ result: resultName })
     });
 
     if (!response.ok) throw new Error("Could not save game");
-    loadGameHistory();
+
+    if (historyDrawer.classList.contains("open")) loadGameHistory();
   } catch (error) {
     console.error("Game history save failed:", error);
     showToast("Game finished, but saving history failed.");
@@ -416,11 +448,6 @@ $("#historyMenuBtn").addEventListener("click", () => {
   loadGameHistory();
 });
 
-$("#gameSettingsBtn").addEventListener("click", () => {
-  closeDrawers();
-  showToast("Choose a game mode using the buttons on the board.");
-});
-
 $("#aiModeBtn").addEventListener("click", () => setMode("ai"));
 $("#twoPlayerBtn").addEventListener("click", () => setMode("two"));
 
@@ -432,11 +459,6 @@ $("#startBtn").addEventListener("click", () => {
 $("#restartBtn").addEventListener("click", () => {
   startGame();
   playSound(380, 0.1);
-});
-
-$("#backBtn").addEventListener("click", () => {
-  closeDrawers();
-  showToast("You're already on the game screen.");
 });
 
 cells.forEach(cell => {
@@ -453,7 +475,7 @@ function updateSoundUI() {
 
 $("#soundBtn").addEventListener("click", () => {
   soundOn = !soundOn;
-  localStorage.setItem("tttSound", String(soundOn));
+  store.set("tttSound", String(soundOn));
   updateSoundUI();
 
   if (soundOn) playSound(520, 0.1);
@@ -461,52 +483,77 @@ $("#soundBtn").addEventListener("click", () => {
 
 /* Themes and custom colors */
 
+function luma(hex) {
+  const n = parseInt(hex.replace("#", ""), 16);
+  return 0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255);
+}
+
 function applyTheme(colors) {
   const root = document.documentElement;
 
   Object.entries(colors).forEach(([key, value]) => {
     root.style.setProperty(`--${key}`, value);
   });
+
+  // Keep button text readable and native controls matched to the theme
+  root.style.setProperty("--on-accent", luma(colors.accent) > 150 ? "#20172E" : "#FFFFFF");
+  root.style.colorScheme = luma(colors.page) < 128 ? "dark" : "light";
 }
 
-function setTheme(name) {
+function setTheme(name, { silent = false } = {}) {
   const colors = themes[name];
   if (!colors) return;
 
   applyTheme(colors);
-  localStorage.setItem("tttTheme", name);
-  localStorage.setItem("tttCustomColors", JSON.stringify(colors));
+  store.set("tttTheme", name);
+  store.set("tttCustomColors", JSON.stringify(colors));
 
   $$(".theme-option").forEach(button => {
-    button.classList.toggle("selected", button.dataset.theme === name);
+    const selected = button.dataset.theme === name;
+    button.classList.toggle("selected", selected);
+    button.setAttribute("aria-pressed", String(selected));
   });
 
   $("#backgroundColor").value = colors.page;
   $("#accentColor").value = colors.accent;
   $("#cardColor").value = colors.card;
 
-  showToast(`${name.charAt(0).toUpperCase() + name.slice(1)} theme applied`);
+  if (!silent) {
+    showToast(`${name.charAt(0).toUpperCase() + name.slice(1)} theme applied`);
+  }
 }
 
 function applyCustomColors() {
-  const previous = JSON.parse(
-    localStorage.getItem("tttCustomColors") ||
-    JSON.stringify(themes.chocolate)
-  );
+  let previous;
+
+  try {
+    previous = JSON.parse(store.get("tttCustomColors") || "null");
+  } catch {
+    previous = null;
+  }
+
+  const page = $("#backgroundColor").value;
+  const dark = luma(page) < 128;
 
   const colors = {
-    ...previous,
-    page: $("#backgroundColor").value,
+    ...(previous || themes.chocolate),
+    page,
     accent: $("#accentColor").value,
     card: $("#cardColor").value,
-    cell: $("#backgroundColor").value
+    cell: page,
+    // Pick readable text for the chosen background
+    text: dark ? "#F7F0E8" : "#38241D",
+    muted: dark ? "#C2B7AB" : "#806B5A"
   };
 
   applyTheme(colors);
-  localStorage.setItem("tttTheme", "custom");
-  localStorage.setItem("tttCustomColors", JSON.stringify(colors));
+  store.set("tttTheme", "custom");
+  store.set("tttCustomColors", JSON.stringify(colors));
 
-  $$(".theme-option").forEach(button => button.classList.remove("selected"));
+  $$(".theme-option").forEach(button => {
+    button.classList.remove("selected");
+    button.setAttribute("aria-pressed", "false");
+  });
 }
 
 $$(".theme-option").forEach(button => {
@@ -529,7 +576,7 @@ async function loadGameHistory() {
   list.replaceChildren();
 
   try {
-    const response = await fetch(`${API_URL}/api/game-history`);
+    const response = await fetchWithTimeout(`${API_URL}/api/game-history`);
     if (!response.ok) throw new Error("History request failed");
 
     const data = await response.json();
@@ -566,238 +613,19 @@ async function loadGameHistory() {
   } catch (error) {
     console.error("History loading failed:", error);
     historyStatus.textContent =
-      "Could not load history. Check your backend connection.";
+      error.name === "AbortError"
+        ? "The server took too long to respond. Try again in a moment."
+        : "Could not load history. Check your backend connection.";
   }
 }
 
 $("#refreshHistoryBtn").addEventListener("click", loadGameHistory);
 
-/* Layout editor */
-
-const defaultLayout = {
-  mode:     { x: 5, y: 2,  w: 90, h: 19 },
-  status:   { x: 5, y: 23, w: 90, h: 8 },
-  board:    { x: 20, y: 33, w: 60, h: 45 },
-  controls: { x: 20, y: 80, w: 60, h: 10 },
-  score:    { x: 10, y: 91, w: 80, h: 9 }
-};
-
-let layout = null;
-let dragState = null;
-let layoutSaved = false;
-
-function readCurrentLayout() {
-  const canvasRect = canvas.getBoundingClientRect();
-  const result = {};
-
-  $$(".design-item").forEach(item => {
-    const rect = item.getBoundingClientRect();
-
-    result[item.dataset.layout] = {
-      x: ((rect.left - canvasRect.left) / canvasRect.width) * 100,
-      y: ((rect.top - canvasRect.top) / canvasRect.height) * 100,
-      w: (rect.width / canvasRect.width) * 100,
-      h: (rect.height / canvasRect.height) * 100
-    };
-  });
-
-  return result;
-}
-
-function applyLayoutPositions() {
-  if (!layout) return;
-
-  canvas.classList.add("custom-layout");
-
-  $$(".design-item").forEach(item => {
-    const pos = layout[item.dataset.layout];
-    if (!pos) return;
-
-    item.style.left = `${pos.x}%`;
-    item.style.top = `${pos.y}%`;
-    item.style.width = `${pos.w}%`;
-    item.style.height = `${pos.h}%`;
-  });
-}
-
-function enterLayoutEditor() {
-  closeDrawers();
-
-  if (!canvas.classList.contains("custom-layout")) {
-    layout = readCurrentLayout();
-  } else {
-    layout = JSON.parse(JSON.stringify(layout || defaultLayout));
-  }
-
-  canvas.classList.add("custom-layout", "editing");
-  document.body.classList.add("editing-layout");
-  editToolbar.hidden = false;
-
-  applyLayoutPositions();
-
-  $$(".design-item").forEach(item => {
-    if (!item.querySelector(".resize-handle")) {
-      const handle = document.createElement("button");
-      handle.className = "resize-handle";
-      handle.type = "button";
-      handle.setAttribute("aria-label", `Resize ${item.dataset.layout}`);
-
-      handle.addEventListener("pointerdown", event => {
-        beginDrag(event, item, true);
-      });
-
-      item.append(handle);
-    }
-
-    if (!item._layoutPointerDown) {
-      item._layoutPointerDown = event => {
-        if (event.target.closest(".resize-handle")) return;
-
-        if (event.target.closest("button, input, select")) {
-          if (event.target.closest(".cell")) return;
-          if (!event.target.closest(".mode-section")) return;
-        }
-
-        beginDrag(event, item, false);
-      };
-
-      item.addEventListener("pointerdown", item._layoutPointerDown);
-    }
-  });
-
-  showToast("Layout editor enabled. Drag a section to move it.");
-}
-
-function beginDrag(event, item, resizing) {
-  if (!canvas.classList.contains("editing")) return;
-
-  event.preventDefault();
-  event.stopPropagation();
-
-  const canvasRect = canvas.getBoundingClientRect();
-  const rect = item.getBoundingClientRect();
-
-  dragState = {
-    item,
-    resizing,
-    pointerId: event.pointerId,
-    startX: event.clientX,
-    startY: event.clientY,
-    x: rect.left - canvasRect.left,
-    y: rect.top - canvasRect.top,
-    w: rect.width,
-    h: rect.height,
-    canvasWidth: canvasRect.width,
-    canvasHeight: canvasRect.height
-  };
-
-  item.classList.add("dragging");
-  item.setPointerCapture?.(event.pointerId);
-}
-
-document.addEventListener("pointermove", event => {
-  if (!dragState || event.pointerId !== dragState.pointerId) return;
-
-  const d = dragState;
-  const dx = event.clientX - d.startX;
-  const dy = event.clientY - d.startY;
-  const canvasRect = canvas.getBoundingClientRect();
-
-  if (d.resizing) {
-    const maxW = canvasRect.width - d.x;
-    const maxH = canvasRect.height - d.y;
-    const width = Math.max(100, Math.min(maxW, d.w + dx));
-    const height = Math.max(70, Math.min(maxH, d.h + dy));
-
-    d.item.style.width = `${(width / canvasRect.width) * 100}%`;
-    d.item.style.height = `${(height / canvasRect.height) * 100}%`;
-  } else {
-    const x = Math.max(0, Math.min(canvasRect.width - d.w, d.x + dx));
-    const y = Math.max(0, Math.min(canvasRect.height - d.h, d.y + dy));
-
-    d.item.style.left = `${(x / canvasRect.width) * 100}%`;
-    d.item.style.top = `${(y / canvasRect.height) * 100}%`;
-  }
-});
-
-function finishDrag() {
-  if (!dragState) return;
-  dragState.item.classList.remove("dragging");
-  dragState = null;
-}
-
-document.addEventListener("pointerup", finishDrag);
-document.addEventListener("pointercancel", finishDrag);
-
-function saveLayout() {
-  layout = {};
-
-  $$(".design-item").forEach(item => {
-    layout[item.dataset.layout] = {
-      x: parseFloat(item.style.left) || 0,
-      y: parseFloat(item.style.top) || 0,
-      w: parseFloat(item.style.width) || 100,
-      h: parseFloat(item.style.height) || 10
-    };
-  });
-
-  localStorage.setItem("tttCustomLayout", JSON.stringify(layout));
-  layoutSaved = true;
-  showToast("Your layout has been saved!");
-}
-
-function exitLayoutEditor() {
-  canvas.classList.remove("editing");
-  document.body.classList.remove("editing-layout");
-  editToolbar.hidden = true;
-
-  $$(".resize-handle").forEach(handle => handle.remove());
-  $$(".design-item").forEach(item => item.classList.remove("dragging"));
-
-  if (!layoutSaved) {
-    const stored = localStorage.getItem("tttCustomLayout");
-
-    if (stored) {
-      try {
-        layout = JSON.parse(stored);
-        applyLayoutPositions();
-      } catch {
-        canvas.classList.remove("custom-layout");
-      }
-    } else {
-      canvas.classList.remove("custom-layout");
-      $$(".design-item").forEach(item => item.removeAttribute("style"));
-    }
-  }
-
-  layoutSaved = false;
-}
-
-function resetLayout() {
-  localStorage.removeItem("tttCustomLayout");
-  layout = null;
-  layoutSaved = false;
-
-  canvas.classList.remove("custom-layout", "editing");
-  document.body.classList.remove("editing-layout");
-  editToolbar.hidden = true;
-
-  $$(".resize-handle").forEach(handle => handle.remove());
-  $$(".design-item").forEach(item => item.removeAttribute("style"));
-
-  showToast("Default layout restored.");
-}
-
-$("#customizeLayoutBtn").addEventListener("click", enterLayoutEditor);
-$("#saveLayoutBtn").addEventListener("click", saveLayout);
-$("#doneLayoutBtn").addEventListener("click", exitLayoutEditor);
-$("#resetLayoutBtn").addEventListener("click", resetLayout);
-
 /* Restore saved preferences */
 
 function restorePreferences() {
-  const savedTheme = localStorage.getItem("tttTheme") || "chocolate";
-  const savedColors = localStorage.getItem("tttCustomColors");
+  const savedTheme = store.get("tttTheme") || "chocolate";
+  const savedColors = store.get("tttCustomColors");
 
   if (savedTheme === "custom" && savedColors) {
     try {
@@ -808,24 +636,13 @@ function restorePreferences() {
       $("#accentColor").value = colors.accent;
       $("#cardColor").value = colors.card;
     } catch {
-      setTheme("chocolate");
+      setTheme("chocolate", { silent: true });
     }
   } else {
-    setTheme(themes[savedTheme] ? savedTheme : "chocolate");
+    setTheme(themes[savedTheme] ? savedTheme : "chocolate", { silent: true });
   }
 
-  const savedLayout = localStorage.getItem("tttCustomLayout");
-
-  if (savedLayout) {
-    try {
-      layout = JSON.parse(savedLayout);
-      applyLayoutPositions();
-    } catch {
-      localStorage.removeItem("tttCustomLayout");
-      layout = null;
-    }
-  }
-
+  store.remove("tttCustomLayout"); // clear any layout saved by the old editor
   updateSoundUI();
 }
 
