@@ -2,177 +2,257 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="theme-color" content="#F6EFE6">
-    <title>Tic-Tac-Toe AI</title>
-    <link rel="stylesheet" href="style.css">
-    <script src="game.js" defer></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tic-Tac-Toe AI</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="game.js" defer></script>
 </head>
 <body>
-    <header class="topbar">
-        <div class="brand">
-            <div class="brand-icon">X<span>O</span></div>
-            <div>
-                <h1>Tic-Tac-Toe AI</h1>
-                <p>HCI • WST • IM PROJECT</p>
-            </div>
+  <header class="topbar">
+    <button id="backBtn" class="icon-btn" aria-label="Back" title="Back">
+      ← <span>Back</span>
+    </button>
+
+    <div class="brand">
+      <h1>Tic-Tac-Toe AI</h1>
+      <p>HCI • WST • IM PROJECT</p>
+    </div>
+
+    <button id="menuBtn" class="icon-btn menu-btn"
+      aria-label="Open settings" aria-expanded="false">☰</button>
+  </header>
+
+  <main>
+    <div class="edit-toolbar" id="editToolbar" hidden>
+      <div>
+        <strong>Customize Layout</strong>
+        <p>Drag a section to move it. Drag its corner to resize.</p>
+      </div>
+      <div class="toolbar-actions">
+        <button id="saveLayoutBtn" class="primary-btn">Save Layout</button>
+        <button id="resetLayoutBtn" class="secondary-btn">Reset</button>
+        <button id="doneLayoutBtn" class="secondary-btn">Done</button>
+      </div>
+    </div>
+
+    <div id="layoutCanvas" class="layout-canvas">
+      <section class="design-item mode-section" data-layout="mode">
+        <div class="section-heading">
+          <h2>Choose Your Mode</h2>
+          <p>Choose how you want to play.</p>
         </div>
 
-        <div class="header-actions">
-            <button class="icon-btn" id="historyBtn" aria-label="Open game history">☷</button>
-            <button class="icon-btn" id="settingsBtn" aria-label="Customize appearance">⚙</button>
+        <div class="mode-buttons">
+          <button id="aiModeBtn" class="mode-btn active">
+            <span class="mode-icon">🤖</span>
+            <span>Vs AI</span>
+            <small>Play against the computer</small>
+          </button>
+          <button id="twoPlayerBtn" class="mode-btn">
+            <span class="mode-icon">👥</span>
+            <span>Two Players</span>
+            <small>Play with a friend</small>
+          </button>
         </div>
-    </header>
+      </section>
 
-    <main>
-        <section class="game-card">
-            <div class="game-heading">
-                <h2>Let's Play</h2>
-                <p>Make your move. Plan your strategy.</p>
-            </div>
+      <section class="design-item status-section" data-layout="status">
+        <p id="status" role="status" aria-live="polite">
+          Click Start Game to begin.
+        </p>
+      </section>
 
-            <div class="mode-switch">
-                <button class="mode-btn active" data-mode="ai" aria-pressed="true">VS AI</button>
-                <button class="mode-btn" data-mode="two" aria-pressed="false">2 PLAYERS</button>
-            </div>
-
-            <div class="players">
-                <div class="player-box active-player" id="playerXBox">
-                    <div class="player-label" id="playerXLabel">YOU</div>
-                    <div class="player-symbol x">X</div>
-                </div>
-                <div class="player-box" id="playerOBox">
-                    <div class="player-label" id="playerOLabel">AI</div>
-                    <div class="player-symbol o">O</div>
-                </div>
-            </div>
-
-            <div class="board" id="board" role="group" aria-label="Tic-Tac-Toe board">
-                <button class="cell" data-index="0" aria-label="Cell 1"></button>
-                <button class="cell" data-index="1" aria-label="Cell 2"></button>
-                <button class="cell" data-index="2" aria-label="Cell 3"></button>
-                <button class="cell" data-index="3" aria-label="Cell 4"></button>
-                <button class="cell" data-index="4" aria-label="Cell 5"></button>
-                <button class="cell" data-index="5" aria-label="Cell 6"></button>
-                <button class="cell" data-index="6" aria-label="Cell 7"></button>
-                <button class="cell" data-index="7" aria-label="Cell 8"></button>
-                <button class="cell" data-index="8" aria-label="Cell 9"></button>
-            </div>
-
-            <div class="status" id="status" role="status" aria-live="polite">
-                Click Start Game to begin.
-            </div>
-
-            <div class="game-actions">
-                <button class="action-btn primary" id="startBtn">Start Game</button>
-                <button class="action-btn" id="restartBtn">Restart Game</button>
-            </div>
-        </section>
-    </main>
-
-    <footer>Tic-Tac-Toe AI · Play smart, have fun.</footer>
-
-    <!-- Settings drawer -->
-    <div class="drawer-overlay" id="settingsOverlay"></div>
-
-    <aside class="drawer" id="settingsDrawer" role="dialog"
-           aria-modal="true" aria-label="Customize appearance" aria-hidden="true">
-        <div class="drawer-header">
-            <div>
-                <h2>Customize Appearance</h2>
-                <p>Make the game your own.</p>
-            </div>
-            <button class="close-btn" id="closeSettings" aria-label="Close settings">×</button>
+      <section class="design-item board-section" data-layout="board">
+        <div id="board" class="board" aria-label="Tic-Tac-Toe board">
+          <button class="cell" data-index="0" aria-label="Cell 1"></button>
+          <button class="cell" data-index="1" aria-label="Cell 2"></button>
+          <button class="cell" data-index="2" aria-label="Cell 3"></button>
+          <button class="cell" data-index="3" aria-label="Cell 4"></button>
+          <button class="cell" data-index="4" aria-label="Cell 5"></button>
+          <button class="cell" data-index="5" aria-label="Cell 6"></button>
+          <button class="cell" data-index="6" aria-label="Cell 7"></button>
+          <button class="cell" data-index="7" aria-label="Cell 8"></button>
+          <button class="cell" data-index="8" aria-label="Cell 9"></button>
         </div>
+      </section>
 
-        <div class="drawer-content">
-            <section class="settings-section">
-                <h3>Choose a theme</h3>
-                <p>Select a design to preview it instantly.</p>
-                <div class="theme-grid" id="themeGrid"></div>
-            </section>
-
-            <section class="settings-section">
-                <h3>Custom colors</h3>
-                <p>Adjust individual colors and see the changes immediately.</p>
-
-                <div class="color-list">
-                    <div class="color-row">
-                        <label for="colorBg">Page background</label>
-                        <input id="colorBg" type="color" value="#F6EFE6">
-                    </div>
-                    <div class="color-row">
-                        <label for="colorBoard">Game board</label>
-                        <input id="colorBoard" type="color" value="#E9D8C5">
-                    </div>
-                    <div class="color-row">
-                        <label for="colorAccent">Accent and buttons</label>
-                        <input id="colorAccent" type="color" value="#C47A50">
-                    </div>
-                    <div class="color-row">
-                        <label for="colorX">X symbol</label>
-                        <input id="colorX" type="color" value="#65432F">
-                    </div>
-                    <div class="color-row">
-                        <label for="colorO">O symbol</label>
-                        <input id="colorO" type="color" value="#C47A50">
-                    </div>
-                </div>
-            </section>
-
-            <section class="settings-section">
-                <h3>Live preview</h3>
-                <p>Your board updates as you customize it.</p>
-
-                <div class="preview">
-                    <div class="preview-title">YOUR GAME BOARD</div>
-                    <div class="preview-board" id="previewBoard">
-                        <div class="preview-cell" data-preview="X"></div>
-                        <div class="preview-cell" data-preview="O"></div>
-                        <div class="preview-cell"></div>
-                        <div class="preview-cell"></div>
-                        <div class="preview-cell" data-preview="X"></div>
-                        <div class="preview-cell"></div>
-                        <div class="preview-cell" data-preview="O"></div>
-                        <div class="preview-cell"></div>
-                        <div class="preview-cell" data-preview="X"></div>
-                    </div>
-                </div>
-            </section>
+      <section class="design-item controls-section" data-layout="controls">
+        <div class="game-buttons">
+          <button id="startBtn" class="primary-btn">▶ Start Game</button>
+          <button id="restartBtn" class="secondary-btn">↻ Restart</button>
         </div>
+      </section>
 
-        <div class="drawer-footer">
-            <div class="drawer-actions">
-                <button class="reset-btn" id="resetTheme">Reset Default</button>
-                <button class="save-btn" id="saveTheme">Save Appearance</button>
-            </div>
-            <p id="settingsMessage" aria-live="polite"></p>
+      <section class="design-item score-section" data-layout="score">
+        <div class="score-card">
+          <span>Player Wins</span>
+          <strong id="playerWins">0</strong>
         </div>
-    </aside>
-
-    <!-- Game history drawer -->
-    <div class="drawer-overlay" id="historyOverlay"></div>
-
-    <aside class="drawer" id="historyDrawer" role="dialog"
-           aria-modal="true" aria-label="Game history" aria-hidden="true">
-        <div class="drawer-header">
-            <div>
-                <h2>Game History</h2>
-                <p>Your recent game results.</p>
-            </div>
-            <button class="close-btn" id="closeHistory" aria-label="Close history">×</button>
+        <div class="score-card">
+          <span>AI Wins</span>
+          <strong id="aiWins">0</strong>
         </div>
-
-        <div class="drawer-content">
-            <div class="history-toolbar">
-                <strong>Recent games</strong>
-                <button class="action-btn" id="refreshHistory">Refresh</button>
-            </div>
-            <div class="history-list" id="historyList">
-                <div class="history-empty">Loading history...</div>
-            </div>
+        <div class="score-card">
+          <span>Draws</span>
+          <strong id="draws">0</strong>
         </div>
-    </aside>
+      </section>
+    </div>
+  </main>
+
+  <div id="drawerBackdrop" class="drawer-backdrop"></div>
+
+  <aside id="settingsDrawer" class="settings-drawer"
+    aria-label="Settings" aria-hidden="true">
+    <div class="drawer-header">
+      <div>
+        <h2>Settings</h2>
+        <p>Personalize your game</p>
+      </div>
+      <button id="closeMenuBtn" class="icon-btn" aria-label="Close settings">✕</button>
+    </div>
+
+    <div class="settings-group">
+      <h3>GAME</h3>
+      <button id="gameSettingsBtn" class="setting-row">
+        <span class="setting-icon">🎮</span>
+        <span class="setting-copy">
+          <strong>Game Settings</strong>
+          <small>Choose a game mode</small>
+        </span>
+        <span>›</span>
+      </button>
+
+      <button id="historyMenuBtn" class="setting-row">
+        <span class="setting-icon">🕘</span>
+        <span class="setting-copy">
+          <strong>Game History</strong>
+          <small>View saved match results</small>
+        </span>
+        <span>›</span>
+      </button>
+    </div>
+
+    <div class="settings-group">
+      <h3>PREFERENCES</h3>
+      <button id="soundBtn" class="setting-row">
+        <span class="setting-icon" id="soundIcon">🔊</span>
+        <span class="setting-copy">
+          <strong>Sound</strong>
+          <small id="soundStatus">Sound is on</small>
+        </span>
+        <span id="soundSwitch" class="switch on"></span>
+      </button>
+    </div>
+
+    <div class="settings-group">
+      <h3>APPEARANCE</h3>
+      <div class="setting-row static-row">
+        <span class="setting-icon">🎨</span>
+        <span class="setting-copy">
+          <strong>Design & Appearance</strong>
+          <small>Change the website theme</small>
+        </span>
+      </div>
+
+      <div class="theme-grid">
+        <button class="theme-option selected" data-theme="chocolate">
+          <span class="theme-swatches">
+            <i style="background:#F5EBDD"></i>
+            <i style="background:#80543D"></i>
+            <i style="background:#FFF9F0"></i>
+          </span>
+          <span>Chocolate Cream</span>
+          <span class="theme-check">✓</span>
+        </button>
+
+        <button class="theme-option" data-theme="dark">
+          <span class="theme-swatches">
+            <i style="background:#171717"></i>
+            <i style="background:#C59A6B"></i>
+            <i style="background:#262626"></i>
+          </span>
+          <span>Midnight Dark</span>
+          <span class="theme-check">✓</span>
+        </button>
+
+        <button class="theme-option" data-theme="ocean">
+          <span class="theme-swatches">
+            <i style="background:#EAF3FA"></i>
+            <i style="background:#246B9E"></i>
+            <i style="background:#FFFFFF"></i>
+          </span>
+          <span>Ocean Blue</span>
+          <span class="theme-check">✓</span>
+        </button>
+
+        <button class="theme-option" data-theme="forest">
+          <span class="theme-swatches">
+            <i style="background:#EAF1E8"></i>
+            <i style="background:#386641"></i>
+            <i style="background:#FFFFFF"></i>
+          </span>
+          <span>Forest Green</span>
+          <span class="theme-check">✓</span>
+        </button>
+
+        <button class="theme-option" data-theme="purple">
+          <span class="theme-swatches">
+            <i style="background:#211A35"></i>
+            <i style="background:#A78BFA"></i>
+            <i style="background:#302644"></i>
+          </span>
+          <span>Purple Neon</span>
+          <span class="theme-check">✓</span>
+        </button>
+      </div>
+
+      <label class="custom-color">
+        <span>Background color</span>
+        <input type="color" id="backgroundColor" value="#F5EBDD">
+      </label>
+      <label class="custom-color">
+        <span>Accent color</span>
+        <input type="color" id="accentColor" value="#80543D">
+      </label>
+      <label class="custom-color">
+        <span>Card color</span>
+        <input type="color" id="cardColor" value="#FFF9F0">
+      </label>
+
+      <button id="resetThemeBtn" class="secondary-btn full-btn">
+        Reset Theme
+      </button>
+    </div>
+
+    <div class="settings-group">
+      <h3>LAYOUT</h3>
+      <p class="settings-description">
+        Move and resize sections to personalize your game screen.
+      </p>
+      <button id="customizeLayoutBtn" class="primary-btn full-btn">
+        ↔ Customize Layout
+      </button>
+    </div>
+  </aside>
+
+  <aside id="historyDrawer" class="settings-drawer history-drawer"
+    aria-label="Game history" aria-hidden="true">
+    <div class="drawer-header">
+      <div>
+        <h2>Game History</h2>
+        <p>Your saved match results</p>
+      </div>
+      <button id="closeHistoryBtn" class="icon-btn" aria-label="Close history">✕</button>
+    </div>
+    <button id="refreshHistoryBtn" class="secondary-btn full-btn">
+      ↻ Refresh History
+    </button>
+    <p id="historyStatus" class="history-status">Loading history...</p>
+    <ul id="historyList" class="history-list"></ul>
+  </aside>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
 </body>
 </html>
