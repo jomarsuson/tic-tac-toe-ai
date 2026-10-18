@@ -1,8 +1,7 @@
-
 const API_URL = "https://tic-tac-toe-backend-1vkx.onrender.com";
 
-const $ = selector => document.querySelector(selector);
-const $$ = selector => [...document.querySelectorAll(selector)];
+const $ = (selector) => document.querySelector(selector);
+const $$ = (selector) => [...document.querySelectorAll(selector)];
 
 const canvas = $("#layoutCanvas");
 const cells = $$(".cell");
@@ -11,11 +10,6 @@ const settingsDrawer = $("#settingsDrawer");
 const historyDrawer = $("#historyDrawer");
 const backdrop = $("#drawerBackdrop");
 const editToolbar = $("#editToolbar");
-
-cells.forEach((cell, index) => {
-  cell.dataset.index = index;
-  cell.type = "button";
-});
 
 let board = Array(9).fill("");
 let gameActive = false;
@@ -26,7 +20,6 @@ let soundOn = localStorage.getItem("tttSound") !== "false";
 let scores = { player: 0, ai: 0, draws: 0 };
 let audioContext = null;
 let toastTimer;
-let turnId = 0;
 
 const wins = [
   [0, 1, 2], [3, 4, 5], [6, 7, 8],
@@ -64,7 +57,6 @@ const themes = {
 
 function showToast(message) {
   const toast = $("#toast");
-  if (!toast) return;
   toast.textContent = message;
   toast.classList.add("show");
   clearTimeout(toastTimer);
@@ -72,18 +64,18 @@ function showToast(message) {
 }
 
 function setStatus(message) {
-  if (statusText) statusText.textContent = message;
+  statusText.textContent = message;
 }
 
 function playSound(frequency = 440, duration = 0.09) {
   if (!soundOn) return;
 
   try {
-    audioContext ||= new (
-      window.AudioContext || window.webkitAudioContext
-    )();
+    audioContext ||= new (window.AudioContext || window.webkitAudioContext)();
 
-    if (audioContext.state === "suspended") audioContext.resume();
+    if (audioContext.state === "suspended") {
+      audioContext.resume();
+    }
 
     const oscillator = audioContext.createOscillator();
     const gain = audioContext.createGain();
@@ -100,25 +92,21 @@ function playSound(frequency = 440, duration = 0.09) {
     gain.connect(audioContext.destination);
     oscillator.start();
     oscillator.stop(audioContext.currentTime + duration);
-  } catch (error) {
-    console.warn("Sound is unavailable.", error);
+  } catch {
+    // Sound is optional if the browser does not support audio.
   }
 }
 
 function setMode(newMode) {
-  if (newMode !== "ai" && newMode !== "two") return;
-
   mode = newMode;
 
-  $("#aiModeBtn")?.classList.toggle("active", mode === "ai");
-  $("#twoPlayerBtn")?.classList.toggle("active", mode === "two");
+  $("#aiModeBtn").classList.toggle("active", mode === "ai");
+  $("#twoPlayerBtn").classList.toggle("active", mode === "two");
 
   startGame();
-  showToast(mode === "ai" ? "Vs AI mode selected" : "Two Players mode selected");
 }
 
 function startGame() {
-  turnId++;
   board = Array(9).fill("");
   gameActive = true;
   aiThinking = false;
@@ -127,7 +115,6 @@ function startGame() {
   cells.forEach((cell, index) => {
     cell.textContent = "";
     cell.disabled = false;
-    cell.dataset.index = index;
     cell.setAttribute("aria-label", `Cell ${index + 1}, empty`);
   });
 
@@ -149,29 +136,47 @@ function checkWinner(position) {
 }
 
 function updateCell(index, mark) {
-  if (index < 0 || index > 8 || board[index]) return;
-
   board[index] = mark;
   cells[index].textContent = mark;
-  cells[index].disabled = true;
   cells[index].setAttribute("aria-label", `Cell ${index + 1}, ${mark}`);
+  cells[index].disabled = true;
   playSound(mark === "X" ? 520 : 360);
 }
 
 function handleCellClick(event) {
-  const cell = event.currentTarget;
-  const index = Number(cell.dataset.index);
+  const index = Number(event.currentTarget.dataset.index);
 
-  if (
-    !Number.isInteger(index) ||
-    index < 0 ||
-    index > 8 ||
-    !gameActive ||
-    aiThinking ||
-    board[index]
-  ) return;
+  if (!gameActive || aiThinking || board[index]) return;
 
-  if (mode === "two") {
+  if (mode === "ai") {
+    updateCell(index, "X");
+
+    if (finishIfOver()) return;
+
+    aiThinking = true;
+    cells.forEach((cell, i) => {
+      cell.disabled = Boolean(board[i]) || true;
+    });
+
+    setStatus("AI is thinking...");
+
+    setTimeout(() => {
+      if (!gameActive) return;
+
+      const move = getBestMove(board);
+
+      if (move !== -1) {
+        updateCell(move, "O");
+      }
+
+      aiThinking = false;
+      cells.forEach((cell, i) => {
+        cell.disabled = !gameActive || Boolean(board[i]);
+      });
+
+      if (!finishIfOver()) setStatus("Your turn — X");
+    }, 450);
+  } else {
     const mark = board.filter(Boolean).length % 2 === 0 ? "X" : "O";
 
     updateCell(index, mark);
@@ -179,38 +184,7 @@ function handleCellClick(event) {
     if (!finishIfOver()) {
       setStatus(mark === "X" ? "Player O's turn" : "Player X's turn");
     }
-
-    return;
   }
-
-  updateCell(index, "X");
-
-  if (finishIfOver()) return;
-
-  aiThinking = true;
-  cells.forEach((button, i) => {
-    button.disabled = Boolean(board[i]) || true;
-  });
-
-  setStatus("AI is thinking...");
-
-  const currentTurn = turnId;
-
-  setTimeout(() => {
-    if (!gameActive || currentTurn !== turnId || mode !== "ai") return;
-
-    const move = getBestMove(board);
-
-    if (move !== -1) updateCell(move, "O");
-
-    aiThinking = false;
-
-    cells.forEach((button, i) => {
-      button.disabled = !gameActive || Boolean(board[i]);
-    });
-
-    if (!finishIfOver()) setStatus("Your turn — X");
-  }, 450);
 }
 
 function minimax(position, maximizing, depth = 0) {
@@ -269,6 +243,7 @@ function getBestMove(position) {
 
 function finishIfOver() {
   const result = checkWinner(board);
+
   if (!result) return false;
 
   gameActive = false;
@@ -289,9 +264,9 @@ function finishIfOver() {
     playSound(200, 0.2);
   }
 
-  if ($("#playerWins")) $("#playerWins").textContent = scores.player;
-  if ($("#aiWins")) $("#aiWins").textContent = scores.ai;
-  if ($("#draws")) $("#draws").textContent = scores.draws;
+  $("#playerWins").textContent = scores.player;
+  $("#aiWins").textContent = scores.ai;
+  $("#draws").textContent = scores.draws;
 
   saveGameResult(result);
   return true;
@@ -314,7 +289,10 @@ async function saveGameResult(result) {
       body: JSON.stringify({ result: resultName })
     });
 
-    if (!response.ok) throw new Error("Could not save game");
+    if (!response.ok) {
+      throw new Error("Could not save game");
+    }
+
     loadGameHistory();
   } catch (error) {
     console.error("Game history save failed:", error);
@@ -322,98 +300,101 @@ async function saveGameResult(result) {
   }
 }
 
-function openDrawer(drawer) {
-  if (!drawer || !backdrop) return;
+// Settings drawer
 
+function openDrawer(drawer) {
   closeDrawers();
+
   drawer.classList.add("open");
   drawer.setAttribute("aria-hidden", "false");
   backdrop.classList.add("open");
 
   if (drawer === settingsDrawer) {
-    $("#menuBtn")?.setAttribute("aria-expanded", "true");
+    $("#menuBtn").setAttribute("aria-expanded", "true");
   }
 }
 
 function closeDrawers() {
   [settingsDrawer, historyDrawer].forEach(drawer => {
-    drawer?.classList.remove("open");
-    drawer?.setAttribute("aria-hidden", "true");
+    drawer.classList.remove("open");
+    drawer.setAttribute("aria-hidden", "true");
   });
 
-  backdrop?.classList.remove("open");
-  $("#menuBtn")?.setAttribute("aria-expanded", "false");
+  backdrop.classList.remove("open");
+  $("#menuBtn").setAttribute("aria-expanded", "false");
 }
 
-$("#menuBtn")?.addEventListener("click", () => openDrawer(settingsDrawer));
-$("#closeMenuBtn")?.addEventListener("click", closeDrawers);
-$("#closeHistoryBtn")?.addEventListener("click", closeDrawers);
-backdrop?.addEventListener("click", closeDrawers);
+$("#menuBtn").addEventListener("click", () => openDrawer(settingsDrawer));
+$("#closeMenuBtn").addEventListener("click", closeDrawers);
+$("#closeHistoryBtn").addEventListener("click", closeDrawers);
+backdrop.addEventListener("click", closeDrawers);
 
-$("#gameSettingsBtn")?.addEventListener("click", () => {
+$("#gameSettingsBtn").addEventListener("click", () => {
   closeDrawers();
-  $(".mode-section")?.scrollIntoView({
+  document.querySelector(".mode-section").scrollIntoView({
     behavior: "smooth",
     block: "center"
   });
 });
 
-$("#historyMenuBtn")?.addEventListener("click", () => {
+$("#historyMenuBtn").addEventListener("click", () => {
   openDrawer(historyDrawer);
   loadGameHistory();
 });
 
-$("#aiModeBtn")?.addEventListener("click", () => setMode("ai"));
-$("#twoPlayerBtn")?.addEventListener("click", () => setMode("two"));
+$("#aiModeBtn").addEventListener("click", () => setMode("ai"));
+$("#twoPlayerBtn").addEventListener("click", () => setMode("two"));
 
-$("#startBtn")?.addEventListener("click", () => {
+$("#startBtn").addEventListener("click", () => {
   startGame();
   playSound(500);
 });
 
-$("#restartBtn")?.addEventListener("click", () => {
+$("#restartBtn").addEventListener("click", () => {
   startGame();
   playSound(420);
 });
 
 cells.forEach(cell => cell.addEventListener("click", handleCellClick));
 
-$("#soundBtn")?.addEventListener("click", () => {
+$("#soundBtn").addEventListener("click", () => {
   soundOn = !soundOn;
   localStorage.setItem("tttSound", String(soundOn));
   updateSoundUI();
+
   if (soundOn) playSound();
   showToast(soundOn ? "Sound enabled" : "Sound muted");
 });
 
 function updateSoundUI() {
-  if ($("#soundStatus")) {
-    $("#soundStatus").textContent = soundOn ? "Sound is on" : "Sound is off";
-  }
-
-  if ($("#soundIcon")) $("#soundIcon").textContent = soundOn ? "🔊" : "🔇";
-  $("#soundSwitch")?.classList.toggle("on", soundOn);
+  $("#soundStatus").textContent = soundOn ? "Sound is on" : "Sound is off";
+  $("#soundIcon").textContent = soundOn ? "🔊" : "🔇";
+  $("#soundSwitch").classList.toggle("on", soundOn);
 }
 
-$("#backBtn")?.addEventListener("click", () => {
-  if (canvas?.classList.contains("editing")) {
+$("#backBtn").addEventListener("click", () => {
+  if (canvas.classList.contains("editing")) {
     exitLayoutEditor();
-  } else if (
-    settingsDrawer?.classList.contains("open") ||
-    historyDrawer?.classList.contains("open")
-  ) {
+  } else if (settingsDrawer.classList.contains("open") ||
+             historyDrawer.classList.contains("open")) {
     closeDrawers();
   } else {
     showToast("You're on the main game screen.");
   }
 });
 
+// Themes and custom colors
+
 function applyTheme(colors) {
   const root = document.documentElement;
 
-  Object.entries(colors).forEach(([key, value]) => {
-    root.style.setProperty(`--${key}`, value);
-  });
+  root.style.setProperty("--page", colors.page);
+  root.style.setProperty("--card", colors.card);
+  root.style.setProperty("--accent", colors.accent);
+  root.style.setProperty("--text", colors.text);
+  root.style.setProperty("--muted", colors.muted);
+  root.style.setProperty("--border", colors.border);
+  root.style.setProperty("--cell", colors.cell);
 }
 
 function setTheme(name) {
@@ -421,6 +402,7 @@ function setTheme(name) {
   if (!colors) return;
 
   applyTheme(colors);
+
   localStorage.setItem("tttTheme", name);
   localStorage.setItem("tttCustomColors", JSON.stringify(colors));
 
@@ -428,13 +410,11 @@ function setTheme(name) {
     button.classList.toggle("selected", button.dataset.theme === name);
   });
 
-  if ($("#backgroundColor")) $("#backgroundColor").value = colors.page;
-  if ($("#accentColor")) $("#accentColor").value = colors.accent;
-  if ($("#cardColor")) $("#cardColor").value = colors.card;
+  $("#backgroundColor").value = colors.page;
+  $("#accentColor").value = colors.accent;
+  $("#cardColor").value = colors.card;
 
-  const selected = $(`.theme-option[data-theme="${name}"]`);
-  const label = selected?.querySelectorAll("span")[1]?.textContent || name;
-  showToast(`${label} theme applied`);
+  showToast(`${$(`.theme-option[data-theme="${name}"]`).querySelectorAll("span")[1].textContent} theme applied`);
 }
 
 function applyCustomColors() {
@@ -462,23 +442,28 @@ $$(".theme-option").forEach(button => {
 });
 
 ["backgroundColor", "accentColor", "cardColor"].forEach(id => {
-  $(`#${id}`)?.addEventListener("input", applyCustomColors);
+  $(`#${id}`).addEventListener("input", applyCustomColors);
 });
 
-$("#resetThemeBtn")?.addEventListener("click", () => setTheme("chocolate"));
+$("#resetThemeBtn").addEventListener("click", () => {
+  setTheme("chocolate");
+});
+
+// Game history
 
 async function loadGameHistory() {
   const list = $("#historyList");
   const historyStatus = $("#historyStatus");
-
-  if (!list || !historyStatus) return;
 
   historyStatus.textContent = "Loading history...";
   list.replaceChildren();
 
   try {
     const response = await fetch(`${API_URL}/api/game-history`);
-    if (!response.ok) throw new Error("History request failed");
+
+    if (!response.ok) {
+      throw new Error("History request failed");
+    }
 
     const data = await response.json();
     const records = Array.isArray(data)
@@ -502,10 +487,12 @@ async function loadGameHistory() {
       const details = document.createElement("small");
 
       title.textContent = record.result || "Game result";
-      details.textContent = record.created_at
+
+      const dateValue = record.created_at
         ? new Date(record.created_at).toLocaleString()
         : "Date unavailable";
 
+      details.textContent = dateValue;
       item.append(title, details);
       list.append(item);
     });
@@ -515,14 +502,16 @@ async function loadGameHistory() {
   }
 }
 
-$("#refreshHistoryBtn")?.addEventListener("click", loadGameHistory);
+$("#refreshHistoryBtn").addEventListener("click", loadGameHistory);
+
+// Drag-and-drop layout editor
 
 const defaultLayout = {
-  mode: { x: 5, y: 2, w: 90, h: 19 },
-  status: { x: 5, y: 23, w: 90, h: 8 },
-  board: { x: 20, y: 33, w: 60, h: 45 },
+  mode:     { x: 5, y: 2,  w: 90, h: 19 },
+  status:   { x: 5, y: 23, w: 90, h: 8 },
+  board:    { x: 20, y: 33, w: 60, h: 45 },
   controls: { x: 20, y: 80, w: 60, h: 10 },
-  score: { x: 10, y: 91, w: 80, h: 9 }
+  score:    { x: 10, y: 91, w: 80, h: 9 }
 };
 
 let layout = null;
@@ -548,7 +537,7 @@ function readCurrentLayout() {
 }
 
 function applyLayoutPositions() {
-  if (!layout || !canvas) return;
+  if (!layout) return;
 
   canvas.classList.add("custom-layout");
 
@@ -574,7 +563,7 @@ function enterLayoutEditor() {
 
   canvas.classList.add("custom-layout", "editing");
   document.body.classList.add("editing-layout");
-  if (editToolbar) editToolbar.hidden = false;
+  editToolbar.hidden = false;
 
   applyLayoutPositions();
 
@@ -584,29 +573,27 @@ function enterLayoutEditor() {
       handle.className = "resize-handle";
       handle.type = "button";
       handle.setAttribute("aria-label", `Resize ${item.dataset.layout}`);
-      handle.addEventListener("pointerdown", event => beginDrag(event, item, true));
+      handle.addEventListener("pointerdown", event => {
+        beginDrag(event, item, true);
+      });
       item.append(handle);
     }
 
-    if (!item._layoutPointerDown) {
-      item._layoutPointerDown = event => {
-        if (event.target.closest(".resize-handle")) return;
-        if (event.target.closest("button, input, select")) {
-          if (event.target.closest(".cell")) return;
-          if (!event.target.closest(".mode-section")) return;
-        }
-        beginDrag(event, item, false);
-      };
-
-      item.addEventListener("pointerdown", item._layoutPointerDown);
-    }
+    item.addEventListener("pointerdown", item._layoutPointerDown ||= event => {
+      if (event.target.closest(".resize-handle")) return;
+      if (event.target.closest("button, input, select")) {
+        if (event.target.closest(".cell")) return;
+        if (!event.target.closest(".mode-section")) return;
+      }
+      beginDrag(event, item, false);
+    });
   });
 
   showToast("Layout editor enabled. Drag a section to move it.");
 }
 
 function beginDrag(event, item, resizing) {
-  if (!canvas?.classList.contains("editing")) return;
+  if (!canvas.classList.contains("editing")) return;
 
   event.preventDefault();
   event.stopPropagation();
@@ -643,14 +630,22 @@ document.addEventListener("pointermove", event => {
   if (d.resizing) {
     const maxW = canvasRect.width - d.x;
     const maxH = canvasRect.height - d.y;
+
     const width = Math.max(100, Math.min(maxW, d.w + dx));
     const height = Math.max(70, Math.min(maxH, d.h + dy));
 
     d.item.style.width = `${(width / canvasRect.width) * 100}%`;
     d.item.style.height = `${(height / canvasRect.height) * 100}%`;
   } else {
-    const x = Math.max(0, Math.min(canvasRect.width - d.w, d.x + dx));
-    const y = Math.max(0, Math.min(canvasRect.height - d.h, d.y + dy));
+    const x = Math.max(0, Math.min(
+      canvasRect.width - d.w,
+      d.x + dx
+    ));
+
+    const y = Math.max(0, Math.min(
+      canvasRect.height - d.h,
+      d.y + dy
+    ));
 
     d.item.style.left = `${(x / canvasRect.width) * 100}%`;
     d.item.style.top = `${(y / canvasRect.height) * 100}%`;
@@ -684,26 +679,29 @@ function saveLayout() {
 }
 
 function exitLayoutEditor() {
-  canvas?.classList.remove("editing");
+  canvas.classList.remove("editing");
   document.body.classList.remove("editing-layout");
-  if (editToolbar) editToolbar.hidden = true;
+  editToolbar.hidden = true;
 
   $$(".resize-handle").forEach(handle => handle.remove());
-  $$(".design-item").forEach(item => item.classList.remove("dragging"));
+  $$(".design-item").forEach(item => {
+    item.classList.remove("dragging");
+  });
 
   if (!layoutSaved) {
     const stored = localStorage.getItem("tttCustomLayout");
-
     if (stored) {
       try {
         layout = JSON.parse(stored);
         applyLayoutPositions();
       } catch {
-        canvas?.classList.remove("custom-layout");
+        canvas.classList.remove("custom-layout");
       }
     } else {
-      canvas?.classList.remove("custom-layout");
-      $$(".design-item").forEach(item => item.removeAttribute("style"));
+      canvas.classList.remove("custom-layout");
+      $$(".design-item").forEach(item => {
+        item.removeAttribute("style");
+      });
     }
   }
 
@@ -715,9 +713,9 @@ function resetLayout() {
   layout = null;
   layoutSaved = false;
 
-  canvas?.classList.remove("custom-layout", "editing");
+  canvas.classList.remove("custom-layout", "editing");
   document.body.classList.remove("editing-layout");
-  if (editToolbar) editToolbar.hidden = true;
+  editToolbar.hidden = true;
 
   $$(".resize-handle").forEach(handle => handle.remove());
   $$(".design-item").forEach(item => item.removeAttribute("style"));
@@ -725,10 +723,12 @@ function resetLayout() {
   showToast("Default layout restored.");
 }
 
-$("#customizeLayoutBtn")?.addEventListener("click", enterLayoutEditor);
-$("#saveLayoutBtn")?.addEventListener("click", saveLayout);
-$("#doneLayoutBtn")?.addEventListener("click", exitLayoutEditor);
-$("#resetLayoutBtn")?.addEventListener("click", resetLayout);
+$("#customizeLayoutBtn").addEventListener("click", enterLayoutEditor);
+$("#saveLayoutBtn").addEventListener("click", saveLayout);
+$("#doneLayoutBtn").addEventListener("click", exitLayoutEditor);
+$("#resetLayoutBtn").addEventListener("click", resetLayout);
+
+// Restore saved preferences
 
 function restorePreferences() {
   const savedTheme = localStorage.getItem("tttTheme") || "chocolate";
@@ -739,9 +739,9 @@ function restorePreferences() {
       const colors = JSON.parse(savedColors);
       applyTheme(colors);
 
-      if ($("#backgroundColor")) $("#backgroundColor").value = colors.page;
-      if ($("#accentColor")) $("#accentColor").value = colors.accent;
-      if ($("#cardColor")) $("#cardColor").value = colors.card;
+      $("#backgroundColor").value = colors.page;
+      $("#accentColor").value = colors.accent;
+      $("#cardColor").value = colors.card;
     } catch {
       setTheme("chocolate");
     }
