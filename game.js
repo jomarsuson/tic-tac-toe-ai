@@ -1,697 +1,769 @@
 
-/* APPEARANCE SETTINGS */
-
-const themePresets = {
-    chocolate: {
-        name: "Chocolate Cream",
-        bg: "#F6EFE6",
-        surface: "#FFFCF8",
-        board: "#E9D8C5",
-        accent: "#C47A50",
-        x: "#65432F",
-        o: "#C47A50",
-        text: "#33251E",
-        muted: "#88786B",
-        border: "#E5D6C6"
-    },
-    midnight: {
-        name: "Midnight Dark",
-        bg: "#111827",
-        surface: "#1F2937",
-        board: "#273449",
-        accent: "#60A5FA",
-        x: "#93C5FD",
-        o: "#F9A8D4",
-        text: "#F3F4F6",
-        muted: "#A8B2C3",
-        border: "#374151"
-    },
-    ocean: {
-        name: "Ocean Blue",
-        bg: "#EAF6FC",
-        surface: "#FFFFFF",
-        board: "#CBE8F5",
-        accent: "#087EA4",
-        x: "#075985",
-        o: "#0891B2",
-        text: "#123044",
-        muted: "#58788B",
-        border: "#C8E0EC"
-    },
-    forest: {
-        name: "Forest Green",
-        bg: "#EDF4EA",
-        surface: "#FFFFFF",
-        board: "#D4E5CF",
-        accent: "#398052",
-        x: "#245C38",
-        o: "#76A85C",
-        text: "#20392A",
-        muted: "#687E6B",
-        border: "#D0DFCC"
-    },
-    purple: {
-        name: "Purple Neon",
-        bg: "#171329",
-        surface: "#241D3A",
-        board: "#33274E",
-        accent: "#A78BFA",
-        x: "#C4B5FD",
-        o: "#F0ABFC",
-        text: "#F5F3FF",
-        muted: "#B6ACD0",
-        border: "#45365F"
-    }
-};
-
-const appearanceKey = "ticTacToeAppearanceV2";
-
-let appearance = {
-    preset: "chocolate",
-    ...themePresets.chocolate
-};
-
-const cssVariables = {
-    bg: "--bg",
-    surface: "--surface",
-    board: "--board",
-    accent: "--accent",
-    x: "--x",
-    o: "--o",
-    text: "--text",
-    muted: "--muted",
-    border: "--border"
-};
-
-function applyAppearance() {
-    const root = document.documentElement;
-
-    Object.entries(cssVariables).forEach(([key, variable]) => {
-        root.style.setProperty(variable, appearance[key]);
-    });
-
-    document.querySelector('meta[name="theme-color"]')
-        ?.setAttribute("content", appearance.bg);
-
-    updatePreview();
-    updateThemeCards();
-    updateColorInputs();
-    renderBoard();
-}
-
-function updatePreview() {
-    const previewBoard = document.getElementById("previewBoard");
-    if (!previewBoard) return;
-
-    previewBoard.style.background = appearance.board;
-
-    previewBoard.querySelectorAll(".preview-cell").forEach(cell => {
-        const symbol = cell.dataset.preview || "";
-
-        cell.textContent = symbol;
-        cell.style.background = appearance.surface;
-        cell.style.color = symbol === "X"
-            ? appearance.x
-            : symbol === "O"
-                ? appearance.o
-                : appearance.text;
-    });
-}
-
-function updateThemeCards() {
-    document.querySelectorAll(".theme-card").forEach(card => {
-        const selected = card.dataset.theme === appearance.preset;
-        card.classList.toggle("active", selected);
-        card.setAttribute("aria-pressed", String(selected));
-    });
-}
-
-function updateColorInputs() {
-    const values = {
-        colorBg: appearance.bg,
-        colorBoard: appearance.board,
-        colorAccent: appearance.accent,
-        colorX: appearance.x,
-        colorO: appearance.o
-    };
-
-    Object.entries(values).forEach(([id, value]) => {
-        const input = document.getElementById(id);
-        if (input) input.value = value;
-    });
-}
-
-function buildThemeCards() {
-    const grid = document.getElementById("themeGrid");
-
-    Object.entries(themePresets).forEach(([key, theme]) => {
-        const button = document.createElement("button");
-        button.type = "button";
-        button.className = "theme-card";
-        button.dataset.theme = key;
-        button.setAttribute("aria-pressed", "false");
-
-        const swatches = document.createElement("div");
-        swatches.className = "swatches";
-
-        [theme.bg, theme.surface, theme.board, theme.accent, theme.x]
-            .forEach(color => {
-                const swatch = document.createElement("span");
-                swatch.style.backgroundColor = color;
-                swatches.appendChild(swatch);
-            });
-
-        const title = document.createElement("strong");
-        title.textContent = theme.name;
-
-        const description = document.createElement("small");
-        description.textContent = "Tap to preview";
-
-        button.append(swatches, title, description);
-
-        button.addEventListener("click", () => {
-            appearance = { preset: key, ...theme };
-            applyAppearance();
-            setSettingsMessage("Theme preview updated.");
-        });
-
-        grid.appendChild(button);
-    });
-}
-
-function setSettingsMessage(message) {
-    document.getElementById("settingsMessage").textContent = message;
-}
-
-[
-    ["colorBg", "bg"],
-    ["colorBoard", "board"],
-    ["colorAccent", "accent"],
-    ["colorX", "x"],
-    ["colorO", "o"]
-].forEach(([id, key]) => {
-    document.getElementById(id).addEventListener("input", event => {
-        appearance[key] = event.target.value;
-        appearance.preset = "custom";
-        applyAppearance();
-        setSettingsMessage("Custom color preview updated.");
-    });
-});
-
-document.getElementById("saveTheme").addEventListener("click", () => {
-    try {
-        localStorage.setItem(appearanceKey, JSON.stringify(appearance));
-        setSettingsMessage("Appearance saved successfully!");
-    } catch {
-        setSettingsMessage("Unable to save settings in this browser.");
-    }
-});
-
-document.getElementById("resetTheme").addEventListener("click", () => {
-    appearance = { preset: "chocolate", ...themePresets.chocolate };
-    applyAppearance();
-
-    try {
-        localStorage.setItem(appearanceKey, JSON.stringify(appearance));
-        setSettingsMessage("Default theme restored.");
-    } catch {
-        setSettingsMessage("Default theme preview restored.");
-    }
-});
-
-function loadAppearance() {
-    try {
-        const saved = localStorage.getItem(appearanceKey);
-        if (!saved) return;
-
-        const parsed = JSON.parse(saved);
-        const preset = themePresets[parsed.preset]
-            ? parsed.preset
-            : "chocolate";
-
-        appearance = {
-            ...themePresets[preset],
-            ...parsed,
-            preset: parsed.preset || preset
-        };
-    } catch {
-        appearance = { preset: "chocolate", ...themePresets.chocolate };
-    }
-}
-
-/* DRAWERS */
-
-function openDrawer(name) {
-    closeDrawers();
-
-    document.getElementById(name + "Overlay").classList.add("open");
-    document.getElementById(name + "Drawer").classList.add("open");
-    document.getElementById(name + "Drawer").setAttribute("aria-hidden", "false");
-    document.body.style.overflow = "hidden";
-}
-
-function closeDrawers() {
-    ["settings", "history"].forEach(name => {
-        document.getElementById(name + "Overlay").classList.remove("open");
-        document.getElementById(name + "Drawer").classList.remove("open");
-        document.getElementById(name + "Drawer").setAttribute("aria-hidden", "true");
-    });
-
-    document.body.style.overflow = "";
-}
-
-document.getElementById("settingsBtn").addEventListener("click", () => {
-    openDrawer("settings");
-});
-
-document.getElementById("historyBtn").addEventListener("click", () => {
-    openDrawer("history");
-});
-
-document.getElementById("closeSettings").addEventListener("click", closeDrawers);
-document.getElementById("closeHistory").addEventListener("click", closeDrawers);
-document.getElementById("settingsOverlay").addEventListener("click", closeDrawers);
-document.getElementById("historyOverlay").addEventListener("click", closeDrawers);
-
-document.addEventListener("keydown", event => {
-    if (event.key === "Escape") closeDrawers();
-});
-
-buildThemeCards();
-loadAppearance();
-applyAppearance();
-
-/* GAME LOGIC */
-
 const API_URL = "https://tic-tac-toe-backend-1vkx.onrender.com";
 
-const cells = [...document.querySelectorAll(".cell")];
-const statusText = document.getElementById("status");
-const startBtn = document.getElementById("startBtn");
-const restartBtn = document.getElementById("restartBtn");
+const $ = (selector) => document.querySelector(selector);
+const $$ = (selector) => [...document.querySelectorAll(selector)];
 
-const winningLines = [
-    [0, 1, 2],
-    [3, 4, 5],
-    [6, 7, 8],
-    [0, 3, 6],
-    [1, 4, 7],
-    [2, 5, 8],
-    [0, 4, 8],
-    [2, 4, 6]
-];
+const canvas = $("#layoutCanvas");
+const cells = $$(".cell");
+const statusText = $("#status");
+const settingsDrawer = $("#settingsDrawer");
+const historyDrawer = $("#historyDrawer");
+const backdrop = $("#drawerBackdrop");
+const editToolbar = $("#editToolbar");
 
 let board = Array(9).fill("");
-let active = false;
-let thinking = false;
+let gameActive = false;
+let aiThinking = false;
 let resultSaved = false;
 let mode = "ai";
-let currentPlayer = "X";
-let aiTimer = null;
-let soundEnabled = true;
+let soundOn = localStorage.getItem("tttSound") !== "false";
+let scores = { player: 0, ai: 0, draws: 0 };
 let audioContext = null;
+let toastTimer;
 
-function playSound(frequency = 500, duration = 0.08) {
-    if (!soundEnabled) return;
+const wins = [
+  [0, 1, 2], [3, 4, 5], [6, 7, 8],
+  [0, 3, 6], [1, 4, 7], [2, 5, 8],
+  [0, 4, 8], [2, 4, 6]
+];
 
-    try {
-        audioContext ||= new (
-            window.AudioContext || window.webkitAudioContext
-        )();
+const themes = {
+  chocolate: {
+    page: "#F5EBDD", card: "#FFF9F0",
+    accent: "#80543D", text: "#38241D",
+    muted: "#806B5A", border: "#D9C5AF", cell: "#F5EBDD"
+  },
+  dark: {
+    page: "#171717", card: "#262626",
+    accent: "#C59A6B", text: "#F7F0E8",
+    muted: "#C2B7AB", border: "#51463C", cell: "#202020"
+  },
+  ocean: {
+    page: "#EAF3FA", card: "#FFFFFF",
+    accent: "#246B9E", text: "#17334A",
+    muted: "#58758A", border: "#BED4E4", cell: "#EAF3FA"
+  },
+  forest: {
+    page: "#EAF1E8", card: "#FFFFFF",
+    accent: "#386641", text: "#233B28",
+    muted: "#647A68", border: "#C5D5C3", cell: "#EAF1E8"
+  },
+  purple: {
+    page: "#211A35", card: "#302644",
+    accent: "#A78BFA", text: "#F5EEFF",
+    muted: "#C5B8DD", border: "#594875", cell: "#261F3A"
+  }
+};
 
-        if (audioContext.state === "suspended") audioContext.resume();
-
-        const oscillator = audioContext.createOscillator();
-        const gain = audioContext.createGain();
-
-        oscillator.type = "sine";
-        oscillator.frequency.value = frequency;
-
-        gain.gain.setValueAtTime(0.07, audioContext.currentTime);
-        gain.gain.exponentialRampToValueAtTime(
-            0.001,
-            audioContext.currentTime + duration
-        );
-
-        oscillator.connect(gain);
-        gain.connect(audioContext.destination);
-
-        oscillator.start();
-        oscillator.stop(audioContext.currentTime + duration);
-    } catch (error) {
-        console.warn("Sound is unavailable.", error);
-    }
+function showToast(message) {
+  const toast = $("#toast");
+  toast.textContent = message;
+  toast.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toast.classList.remove("show"), 2400);
 }
 
-function findWinner(position) {
-    for (const line of winningLines) {
-        const [a, b, c] = line;
-
-        if (
-            position[a] &&
-            position[a] === position[b] &&
-            position[b] === position[c]
-        ) {
-            return { symbol: position[a], line };
-        }
-    }
-
-    return null;
+function setStatus(message) {
+  statusText.textContent = message;
 }
 
-function renderBoard(winningLine = []) {
-    cells.forEach((cell, index) => {
-        const symbol = board[index];
+function playSound(frequency = 440, duration = 0.09) {
+  if (!soundOn) return;
 
-        cell.textContent = symbol;
-        cell.classList.toggle("x", symbol === "X");
-        cell.classList.toggle("o", symbol === "O");
-        cell.classList.toggle("winner", winningLine.includes(index));
+  try {
+    audioContext ||= new (window.AudioContext || window.webkitAudioContext)();
 
-        cell.disabled = !active || thinking || symbol !== "";
+    if (audioContext.state === "suspended") {
+      audioContext.resume();
+    }
 
-        cell.setAttribute(
-            "aria-label",
-            `Cell ${index + 1}${symbol ? ": " + symbol : ", empty"}`
-        );
-    });
+    const oscillator = audioContext.createOscillator();
+    const gain = audioContext.createGain();
 
-    document.getElementById("playerXBox").classList.toggle(
-        "active-player",
-        active && currentPlayer === "X"
+    oscillator.frequency.value = frequency;
+    oscillator.type = "sine";
+    gain.gain.setValueAtTime(0.08, audioContext.currentTime);
+    gain.gain.exponentialRampToValueAtTime(
+      0.001,
+      audioContext.currentTime + duration
     );
 
-    document.getElementById("playerOBox").classList.toggle(
-        "active-player",
-        active && currentPlayer === "O"
-    );
+    oscillator.connect(gain);
+    gain.connect(audioContext.destination);
+    oscillator.start();
+    oscillator.stop(audioContext.currentTime + duration);
+  } catch {
+    // Sound is optional if the browser does not support audio.
+  }
 }
 
-function updateModeButtons() {
-    document.querySelectorAll(".mode-btn").forEach(button => {
-        const selected = button.dataset.mode === mode;
+function setMode(newMode) {
+  mode = newMode;
 
-        button.classList.toggle("active", selected);
-        button.setAttribute("aria-pressed", String(selected));
-    });
+  $("#aiModeBtn").classList.toggle("active", mode === "ai");
+  $("#twoPlayerBtn").classList.toggle("active", mode === "two");
 
-    document.getElementById("playerXLabel").textContent =
-        mode === "ai" ? "YOU" : "PLAYER 1";
-
-    document.getElementById("playerOLabel").textContent =
-        mode === "ai" ? "AI" : "PLAYER 2";
+  startGame();
 }
-
-function selectMode(nextMode) {
-    if (nextMode !== "ai" && nextMode !== "two") return;
-
-    mode = nextMode;
-    clearTimeout(aiTimer);
-    updateModeButtons();
-    startGame();
-}
-
-document.querySelectorAll(".mode-btn").forEach(button => {
-    button.addEventListener("click", () => {
-        selectMode(button.dataset.mode);
-    });
-});
 
 function startGame() {
-    clearTimeout(aiTimer);
+  board = Array(9).fill("");
+  gameActive = true;
+  aiThinking = false;
+  resultSaved = false;
 
-    board = Array(9).fill("");
-    active = true;
-    thinking = false;
-    resultSaved = false;
-    currentPlayer = "X";
+  cells.forEach((cell, index) => {
+    cell.textContent = "";
+    cell.disabled = false;
+    cell.setAttribute("aria-label", `Cell ${index + 1}, empty`);
+  });
 
-    startBtn.textContent = "Game Started";
-
-    statusText.textContent = mode === "ai"
-        ? "Your turn! Play as X."
-        : "Player 1's turn (X).";
-
-    renderBoard();
+  setStatus(mode === "ai" ? "Your turn — X" : "Player X's turn");
 }
 
-function endGame(message, result, winningLine = []) {
-    active = false;
-    thinking = false;
-    statusText.textContent = message;
-    renderBoard(winningLine);
+function checkWinner(position) {
+  for (const [a, b, c] of wins) {
+    if (
+      position[a] &&
+      position[a] === position[b] &&
+      position[b] === position[c]
+    ) {
+      return position[a];
+    }
+  }
 
-    if (result) saveGameResult(result);
+  return position.every(Boolean) ? "draw" : null;
 }
 
-async function saveGameResult(result) {
-    if (resultSaved) return;
-    resultSaved = true;
-
-    try {
-        const response = await fetch(`${API_URL}/api/save-game`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ result })
-        });
-
-        if (!response.ok) {
-            throw new Error(`Save failed: ${response.status}`);
-        }
-    } catch (error) {
-        console.error("Unable to save game result:", error);
-    }
-
-    loadGameHistory();
+function updateCell(index, mark) {
+  board[index] = mark;
+  cells[index].textContent = mark;
+  cells[index].setAttribute("aria-label", `Cell ${index + 1}, ${mark}`);
+  cells[index].disabled = true;
+  playSound(mark === "X" ? 520 : 360);
 }
 
-function checkGameOver() {
-    const winner = findWinner(board);
+function handleCellClick(event) {
+  const index = Number(event.currentTarget.dataset.index);
 
-    if (winner) {
-        let result;
+  if (!gameActive || aiThinking || board[index]) return;
 
-        if (mode === "ai") {
-            result = winner.symbol === "X" ? "Player Wins" : "AI Wins";
-        } else {
-            result = winner.symbol === "X" ? "Player 1 Wins" : "Player 2 Wins";
-        }
+  if (mode === "ai") {
+    updateCell(index, "X");
 
-        playSound(750, 0.22);
+    if (finishIfOver()) return;
 
-        endGame(
-            `${result}! 🎉`,
-            result,
-            winner.line
-        );
+    aiThinking = true;
+    cells.forEach((cell, i) => {
+      cell.disabled = Boolean(board[i]) || true;
+    });
 
-        return true;
+    setStatus("AI is thinking...");
+
+    setTimeout(() => {
+      if (!gameActive) return;
+
+      const move = getBestMove(board);
+
+      if (move !== -1) {
+        updateCell(move, "O");
+      }
+
+      aiThinking = false;
+      cells.forEach((cell, i) => {
+        cell.disabled = !gameActive || Boolean(board[i]);
+      });
+
+      if (!finishIfOver()) setStatus("Your turn — X");
+    }, 450);
+  } else {
+    const mark = board.filter(Boolean).length % 2 === 0 ? "X" : "O";
+
+    updateCell(index, mark);
+
+    if (!finishIfOver()) {
+      setStatus(mark === "X" ? "Player O's turn" : "Player X's turn");
     }
-
-    if (board.every(Boolean)) {
-        playSound(330, 0.25);
-        endGame("It's a draw!", "Draw");
-        return true;
-    }
-
-    return false;
+  }
 }
 
 function minimax(position, maximizing, depth = 0) {
-    const winner = findWinner(position);
+  const result = checkWinner(position);
 
-    if (winner?.symbol === "O") return 10 - depth;
-    if (winner?.symbol === "X") return depth - 10;
-    if (position.every(Boolean)) return 0;
+  if (result === "O") return 10 - depth;
+  if (result === "X") return depth - 10;
+  if (result === "draw") return 0;
 
-    if (maximizing) {
-        let best = -Infinity;
-
-        for (let i = 0; i < 9; i++) {
-            if (!position[i]) {
-                position[i] = "O";
-                best = Math.max(
-                    best,
-                    minimax(position, false, depth + 1)
-                );
-                position[i] = "";
-            }
-        }
-
-        return best;
-    }
-
-    let best = Infinity;
+  if (maximizing) {
+    let best = -Infinity;
 
     for (let i = 0; i < 9; i++) {
-        if (!position[i]) {
-            position[i] = "X";
-            best = Math.min(
-                best,
-                minimax(position, true, depth + 1)
-            );
-            position[i] = "";
-        }
+      if (position[i]) continue;
+
+      position[i] = "O";
+      best = Math.max(best, minimax(position, false, depth + 1));
+      position[i] = "";
     }
 
     return best;
+  }
+
+  let best = Infinity;
+
+  for (let i = 0; i < 9; i++) {
+    if (position[i]) continue;
+
+    position[i] = "X";
+    best = Math.min(best, minimax(position, true, depth + 1));
+    position[i] = "";
+  }
+
+  return best;
 }
 
-function getBestMove() {
-    let bestScore = -Infinity;
-    let bestMove = -1;
+function getBestMove(position) {
+  let bestScore = -Infinity;
+  let bestMove = -1;
 
-    for (let i = 0; i < 9; i++) {
-        if (!board[i]) {
-            board[i] = "O";
-            const score = minimax(board, false);
-            board[i] = "";
+  for (let i = 0; i < 9; i++) {
+    if (position[i]) continue;
 
-            if (score > bestScore) {
-                bestScore = score;
-                bestMove = i;
-            }
-        }
+    position[i] = "O";
+    const score = minimax(position, false);
+    position[i] = "";
+
+    if (score > bestScore) {
+      bestScore = score;
+      bestMove = i;
+    }
+  }
+
+  return bestMove;
+}
+
+function finishIfOver() {
+  const result = checkWinner(board);
+
+  if (!result) return false;
+
+  gameActive = false;
+  aiThinking = false;
+  cells.forEach(cell => cell.disabled = true);
+
+  if (result === "draw") {
+    scores.draws++;
+    setStatus("It's a draw!");
+    playSound(280, 0.2);
+  } else if (result === "X") {
+    scores.player++;
+    setStatus(mode === "ai" ? "You win!" : "Player X wins!");
+    playSound(660, 0.2);
+  } else {
+    scores.ai++;
+    setStatus(mode === "ai" ? "AI wins!" : "Player O wins!");
+    playSound(200, 0.2);
+  }
+
+  $("#playerWins").textContent = scores.player;
+  $("#aiWins").textContent = scores.ai;
+  $("#draws").textContent = scores.draws;
+
+  saveGameResult(result);
+  return true;
+}
+
+async function saveGameResult(result) {
+  if (resultSaved) return;
+  resultSaved = true;
+
+  const resultName = result === "draw"
+    ? "Draw"
+    : result === "X"
+      ? "Player Wins"
+      : "AI Wins";
+
+  try {
+    const response = await fetch(`${API_URL}/api/save-game`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ result: resultName })
+    });
+
+    if (!response.ok) {
+      throw new Error("Could not save game");
     }
 
-    return bestMove;
+    loadGameHistory();
+  } catch (error) {
+    console.error("Game history save failed:", error);
+    showToast("Game finished, but saving history failed.");
+  }
 }
 
-function aiMove() {
-    if (!active || mode !== "ai") return;
+// Settings drawer
 
-    thinking = true;
-    statusText.textContent = "AI is thinking...";
-    renderBoard();
+function openDrawer(drawer) {
+  closeDrawers();
 
-    aiTimer = setTimeout(() => {
-        if (!active || mode !== "ai") return;
+  drawer.classList.add("open");
+  drawer.setAttribute("aria-hidden", "false");
+  backdrop.classList.add("open");
 
-        const move = getBestMove();
-
-        if (move !== -1) board[move] = "O";
-
-        thinking = false;
-        playSound(420, 0.1);
-
-        if (checkGameOver()) return;
-
-        currentPlayer = "X";
-        statusText.textContent = "Your turn! Play as X.";
-        renderBoard();
-    }, 450);
+  if (drawer === settingsDrawer) {
+    $("#menuBtn").setAttribute("aria-expanded", "true");
+  }
 }
 
-function handleCellClick(index) {
-    if (!active || thinking || board[index]) return;
+function closeDrawers() {
+  [settingsDrawer, historyDrawer].forEach(drawer => {
+    drawer.classList.remove("open");
+    drawer.setAttribute("aria-hidden", "true");
+  });
 
-    board[index] = currentPlayer;
-    playSound(currentPlayer === "X" ? 560 : 440, 0.08);
-
-    if (checkGameOver()) return;
-
-    if (mode === "ai") {
-        currentPlayer = "O";
-        aiMove();
-    } else {
-        currentPlayer = currentPlayer === "X" ? "O" : "X";
-
-        statusText.textContent = currentPlayer === "X"
-            ? "Player 1's turn (X)."
-            : "Player 2's turn (O).";
-
-        renderBoard();
-    }
+  backdrop.classList.remove("open");
+  $("#menuBtn").setAttribute("aria-expanded", "false");
 }
 
-cells.forEach((cell, index) => {
-    cell.addEventListener("click", () => handleCellClick(index));
+$("#menuBtn").addEventListener("click", () => openDrawer(settingsDrawer));
+$("#closeMenuBtn").addEventListener("click", closeDrawers);
+$("#closeHistoryBtn").addEventListener("click", closeDrawers);
+backdrop.addEventListener("click", closeDrawers);
+
+$("#gameSettingsBtn").addEventListener("click", () => {
+  closeDrawers();
+  document.querySelector(".mode-section").scrollIntoView({
+    behavior: "smooth",
+    block: "center"
+  });
 });
 
-startBtn.addEventListener("click", startGame);
-restartBtn.addEventListener("click", startGame);
+$("#historyMenuBtn").addEventListener("click", () => {
+  openDrawer(historyDrawer);
+  loadGameHistory();
+});
 
-/* GAME HISTORY */
+$("#aiModeBtn").addEventListener("click", () => setMode("ai"));
+$("#twoPlayerBtn").addEventListener("click", () => setMode("two"));
 
-async function loadGameHistory() {
-    const list = document.getElementById("historyList");
+$("#startBtn").addEventListener("click", () => {
+  startGame();
+  playSound(500);
+});
 
-    list.replaceChildren();
+$("#restartBtn").addEventListener("click", () => {
+  startGame();
+  playSound(420);
+});
 
-    const loading = document.createElement("div");
-    loading.className = "history-empty";
-    loading.textContent = "Loading history...";
-    list.appendChild(loading);
+cells.forEach(cell => cell.addEventListener("click", handleCellClick));
 
-    try {
-        const response = await fetch(`${API_URL}/api/game-history`);
+$("#soundBtn").addEventListener("click", () => {
+  soundOn = !soundOn;
+  localStorage.setItem("tttSound", String(soundOn));
+  updateSoundUI();
 
-        if (!response.ok) {
-            throw new Error(`History request failed: ${response.status}`);
-        }
+  if (soundOn) playSound();
+  showToast(soundOn ? "Sound enabled" : "Sound muted");
+});
 
-        const data = await response.json();
-
-        const games = Array.isArray(data)
-            ? data
-            : Array.isArray(data.history)
-                ? data.history
-                : Array.isArray(data.data)
-                    ? data.data
-                    : [];
-
-        list.replaceChildren();
-
-        if (!games.length) {
-            const empty = document.createElement("div");
-            empty.className = "history-empty";
-            empty.textContent = "No games recorded yet.";
-            list.appendChild(empty);
-            return;
-        }
-
-        games.forEach(game => {
-            const item = document.createElement("div");
-            item.className = "history-item";
-
-            const result = document.createElement("div");
-            result.className = "history-result";
-            result.textContent = game.result || "Game completed";
-
-            const date = document.createElement("div");
-            date.className = "history-date";
-
-            const dateValue = game.created_at
-                ? new Date(game.created_at)
-                : null;
-
-            date.textContent =
-                dateValue && !Number.isNaN(dateValue.getTime())
-                    ? dateValue.toLocaleString()
-                    : "";
-
-            item.append(result, date);
-            list.appendChild(item);
-        });
-    } catch (error) {
-        console.error("Unable to load game history:", error);
-
-        list.replaceChildren();
-
-        const errorMessage = document.createElement("div");
-        errorMessage.className = "history-empty";
-        errorMessage.textContent = "Unable to load history. Try Refresh.";
-        list.appendChild(errorMessage);
-    }
+function updateSoundUI() {
+  $("#soundStatus").textContent = soundOn ? "Sound is on" : "Sound is off";
+  $("#soundIcon").textContent = soundOn ? "🔊" : "🔇";
+  $("#soundSwitch").classList.toggle("on", soundOn);
 }
 
-document.getElementById("refreshHistory").addEventListener(
-    "click",
-    loadGameHistory
-);
+$("#backBtn").addEventListener("click", () => {
+  if (canvas.classList.contains("editing")) {
+    exitLayoutEditor();
+  } else if (settingsDrawer.classList.contains("open") ||
+             historyDrawer.classList.contains("open")) {
+    closeDrawers();
+  } else {
+    showToast("You're on the main game screen.");
+  }
+});
 
-/* INITIALIZE */
+// Themes and custom colors
 
-updateModeButtons();
-renderBoard();
-loadGameHistory();
+function applyTheme(colors) {
+  const root = document.documentElement;
+
+  root.style.setProperty("--page", colors.page);
+  root.style.setProperty("--card", colors.card);
+  root.style.setProperty("--accent", colors.accent);
+  root.style.setProperty("--text", colors.text);
+  root.style.setProperty("--muted", colors.muted);
+  root.style.setProperty("--border", colors.border);
+  root.style.setProperty("--cell", colors.cell);
+}
+
+function setTheme(name) {
+  const colors = themes[name];
+  if (!colors) return;
+
+  applyTheme(colors);
+
+  localStorage.setItem("tttTheme", name);
+  localStorage.setItem("tttCustomColors", JSON.stringify(colors));
+
+  $$(".theme-option").forEach(button => {
+    button.classList.toggle("selected", button.dataset.theme === name);
+  });
+
+  $("#backgroundColor").value = colors.page;
+  $("#accentColor").value = colors.accent;
+  $("#cardColor").value = colors.card;
+
+  showToast(`${$(`.theme-option[data-theme="${name}"]`).querySelectorAll("span")[1].textContent} theme applied`);
+}
+
+function applyCustomColors() {
+  const previous = JSON.parse(
+    localStorage.getItem("tttCustomColors") || JSON.stringify(themes.chocolate)
+  );
+
+  const colors = {
+    ...previous,
+    page: $("#backgroundColor").value,
+    accent: $("#accentColor").value,
+    card: $("#cardColor").value,
+    cell: $("#backgroundColor").value
+  };
+
+  applyTheme(colors);
+  localStorage.setItem("tttTheme", "custom");
+  localStorage.setItem("tttCustomColors", JSON.stringify(colors));
+
+  $$(".theme-option").forEach(button => button.classList.remove("selected"));
+}
+
+$$(".theme-option").forEach(button => {
+  button.addEventListener("click", () => setTheme(button.dataset.theme));
+});
+
+["backgroundColor", "accentColor", "cardColor"].forEach(id => {
+  $(`#${id}`).addEventListener("input", applyCustomColors);
+});
+
+$("#resetThemeBtn").addEventListener("click", () => {
+  setTheme("chocolate");
+});
+
+// Game history
+
+async function loadGameHistory() {
+  const list = $("#historyList");
+  const historyStatus = $("#historyStatus");
+
+  historyStatus.textContent = "Loading history...";
+  list.replaceChildren();
+
+  try {
+    const response = await fetch(`${API_URL}/api/game-history`);
+
+    if (!response.ok) {
+      throw new Error("History request failed");
+    }
+
+    const data = await response.json();
+    const records = Array.isArray(data)
+      ? data
+      : Array.isArray(data.history)
+        ? data.history
+        : Array.isArray(data.data)
+          ? data.data
+          : [];
+
+    if (!records.length) {
+      historyStatus.textContent = "No saved games yet. Play a game to see results here.";
+      return;
+    }
+
+    historyStatus.textContent = `${records.length} saved result(s)`;
+
+    records.forEach(record => {
+      const item = document.createElement("li");
+      const title = document.createElement("strong");
+      const details = document.createElement("small");
+
+      title.textContent = record.result || "Game result";
+
+      const dateValue = record.created_at
+        ? new Date(record.created_at).toLocaleString()
+        : "Date unavailable";
+
+      details.textContent = dateValue;
+      item.append(title, details);
+      list.append(item);
+    });
+  } catch (error) {
+    console.error("History loading failed:", error);
+    historyStatus.textContent = "Could not load history. Check your backend connection.";
+  }
+}
+
+$("#refreshHistoryBtn").addEventListener("click", loadGameHistory);
+
+// Drag-and-drop layout editor
+
+const defaultLayout = {
+  mode:     { x: 5, y: 2,  w: 90, h: 19 },
+  status:   { x: 5, y: 23, w: 90, h: 8 },
+  board:    { x: 20, y: 33, w: 60, h: 45 },
+  controls: { x: 20, y: 80, w: 60, h: 10 },
+  score:    { x: 10, y: 91, w: 80, h: 9 }
+};
+
+let layout = null;
+let dragState = null;
+let layoutSaved = false;
+
+function readCurrentLayout() {
+  const canvasRect = canvas.getBoundingClientRect();
+  const result = {};
+
+  $$(".design-item").forEach(item => {
+    const rect = item.getBoundingClientRect();
+
+    result[item.dataset.layout] = {
+      x: ((rect.left - canvasRect.left) / canvasRect.width) * 100,
+      y: ((rect.top - canvasRect.top) / canvasRect.height) * 100,
+      w: (rect.width / canvasRect.width) * 100,
+      h: (rect.height / canvasRect.height) * 100
+    };
+  });
+
+  return result;
+}
+
+function applyLayoutPositions() {
+  if (!layout) return;
+
+  canvas.classList.add("custom-layout");
+
+  $$(".design-item").forEach(item => {
+    const pos = layout[item.dataset.layout];
+    if (!pos) return;
+
+    item.style.left = `${pos.x}%`;
+    item.style.top = `${pos.y}%`;
+    item.style.width = `${pos.w}%`;
+    item.style.height = `${pos.h}%`;
+  });
+}
+
+function enterLayoutEditor() {
+  closeDrawers();
+
+  if (!canvas.classList.contains("custom-layout")) {
+    layout = readCurrentLayout();
+  } else {
+    layout = JSON.parse(JSON.stringify(layout || defaultLayout));
+  }
+
+  canvas.classList.add("custom-layout", "editing");
+  document.body.classList.add("editing-layout");
+  editToolbar.hidden = false;
+
+  applyLayoutPositions();
+
+  $$(".design-item").forEach(item => {
+    if (!item.querySelector(".resize-handle")) {
+      const handle = document.createElement("button");
+      handle.className = "resize-handle";
+      handle.type = "button";
+      handle.setAttribute("aria-label", `Resize ${item.dataset.layout}`);
+      handle.addEventListener("pointerdown", event => {
+        beginDrag(event, item, true);
+      });
+      item.append(handle);
+    }
+
+    item.addEventListener("pointerdown", item._layoutPointerDown ||= event => {
+      if (event.target.closest(".resize-handle")) return;
+      if (event.target.closest("button, input, select")) {
+        if (event.target.closest(".cell")) return;
+        if (!event.target.closest(".mode-section")) return;
+      }
+      beginDrag(event, item, false);
+    });
+  });
+
+  showToast("Layout editor enabled. Drag a section to move it.");
+}
+
+function beginDrag(event, item, resizing) {
+  if (!canvas.classList.contains("editing")) return;
+
+  event.preventDefault();
+  event.stopPropagation();
+
+  const canvasRect = canvas.getBoundingClientRect();
+  const rect = item.getBoundingClientRect();
+
+  dragState = {
+    item,
+    resizing,
+    pointerId: event.pointerId,
+    startX: event.clientX,
+    startY: event.clientY,
+    x: rect.left - canvasRect.left,
+    y: rect.top - canvasRect.top,
+    w: rect.width,
+    h: rect.height,
+    canvasWidth: canvasRect.width,
+    canvasHeight: canvasRect.height
+  };
+
+  item.classList.add("dragging");
+  item.setPointerCapture?.(event.pointerId);
+}
+
+document.addEventListener("pointermove", event => {
+  if (!dragState || event.pointerId !== dragState.pointerId) return;
+
+  const d = dragState;
+  const dx = event.clientX - d.startX;
+  const dy = event.clientY - d.startY;
+  const canvasRect = canvas.getBoundingClientRect();
+
+  if (d.resizing) {
+    const maxW = canvasRect.width - d.x;
+    const maxH = canvasRect.height - d.y;
+
+    const width = Math.max(100, Math.min(maxW, d.w + dx));
+    const height = Math.max(70, Math.min(maxH, d.h + dy));
+
+    d.item.style.width = `${(width / canvasRect.width) * 100}%`;
+    d.item.style.height = `${(height / canvasRect.height) * 100}%`;
+  } else {
+    const x = Math.max(0, Math.min(
+      canvasRect.width - d.w,
+      d.x + dx
+    ));
+
+    const y = Math.max(0, Math.min(
+      canvasRect.height - d.h,
+      d.y + dy
+    ));
+
+    d.item.style.left = `${(x / canvasRect.width) * 100}%`;
+    d.item.style.top = `${(y / canvasRect.height) * 100}%`;
+  }
+});
+
+function finishDrag() {
+  if (!dragState) return;
+  dragState.item.classList.remove("dragging");
+  dragState = null;
+}
+
+document.addEventListener("pointerup", finishDrag);
+document.addEventListener("pointercancel", finishDrag);
+
+function saveLayout() {
+  layout = {};
+
+  $$(".design-item").forEach(item => {
+    layout[item.dataset.layout] = {
+      x: parseFloat(item.style.left) || 0,
+      y: parseFloat(item.style.top) || 0,
+      w: parseFloat(item.style.width) || 100,
+      h: parseFloat(item.style.height) || 10
+    };
+  });
+
+  localStorage.setItem("tttCustomLayout", JSON.stringify(layout));
+  layoutSaved = true;
+  showToast("Your layout has been saved!");
+}
+
+function exitLayoutEditor() {
+  canvas.classList.remove("editing");
+  document.body.classList.remove("editing-layout");
+  editToolbar.hidden = true;
+
+  $$(".resize-handle").forEach(handle => handle.remove());
+  $$(".design-item").forEach(item => {
+    item.classList.remove("dragging");
+  });
+
+  if (!layoutSaved) {
+    const stored = localStorage.getItem("tttCustomLayout");
+    if (stored) {
+      try {
+        layout = JSON.parse(stored);
+        applyLayoutPositions();
+      } catch {
+        canvas.classList.remove("custom-layout");
+      }
+    } else {
+      canvas.classList.remove("custom-layout");
+      $$(".design-item").forEach(item => {
+        item.removeAttribute("style");
+      });
+    }
+  }
+
+  layoutSaved = false;
+}
+
+function resetLayout() {
+  localStorage.removeItem("tttCustomLayout");
+  layout = null;
+  layoutSaved = false;
+
+  canvas.classList.remove("custom-layout", "editing");
+  document.body.classList.remove("editing-layout");
+  editToolbar.hidden = true;
+
+  $$(".resize-handle").forEach(handle => handle.remove());
+  $$(".design-item").forEach(item => item.removeAttribute("style"));
+
+  showToast("Default layout restored.");
+}
+
+$("#customizeLayoutBtn").addEventListener("click", enterLayoutEditor);
+$("#saveLayoutBtn").addEventListener("click", saveLayout);
+$("#doneLayoutBtn").addEventListener("click", exitLayoutEditor);
+$("#resetLayoutBtn").addEventListener("click", resetLayout);
+
+// Restore saved preferences
+
+function restorePreferences() {
+  const savedTheme = localStorage.getItem("tttTheme") || "chocolate";
+  const savedColors = localStorage.getItem("tttCustomColors");
+
+  if (savedTheme === "custom" && savedColors) {
+    try {
+      const colors = JSON.parse(savedColors);
+      applyTheme(colors);
+
+      $("#backgroundColor").value = colors.page;
+      $("#accentColor").value = colors.accent;
+      $("#cardColor").value = colors.card;
+    } catch {
+      setTheme("chocolate");
+    }
+  } else {
+    setTheme(themes[savedTheme] ? savedTheme : "chocolate");
+  }
+
+  const savedLayout = localStorage.getItem("tttCustomLayout");
+
+  if (savedLayout) {
+    try {
+      layout = JSON.parse(savedLayout);
+      applyLayoutPositions();
+    } catch {
+      localStorage.removeItem("tttCustomLayout");
+      layout = null;
+    }
+  }
+
+  updateSoundUI();
+}
+
+restorePreferences();
+startGame();
