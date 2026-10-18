@@ -101,6 +101,13 @@
           <small>View saved results</small>
         </span>
       </button>
+      <button class="setting-row" id="feedbackMenuBtn" type="button">
+        <span class="setting-icon">💬</span>
+        <span class="setting-copy">
+          <strong>Suggestions &amp; comments</strong>
+          <small>Tell us what to improve</small>
+        </span>
+      </button>
       <button class="setting-row" id="soundBtn" type="button">
         <span class="setting-icon" id="soundIcon">🔊</span>
         <span class="setting-copy">
@@ -152,30 +159,6 @@
       </label>
       <button class="secondary-btn full-btn" id="resetThemeBtn" type="button">Reset theme</button>
     </section>
-
-    <!-- Added Comments and Suggestions section -->
-    <section class="settings-group" id="feedbackSection">
-      <h3>COMMENTS &amp; SUGGESTIONS</h3>
-      <p class="settings-description">Have an idea or found a problem? Let us know.</p>
-
-      <form id="feedbackForm" class="feedback-form">
-        <label for="feedbackName">Name (optional)</label>
-        <input id="feedbackName" name="name" type="text" maxlength="60" placeholder="Your name">
-
-        <label for="feedbackType">Feedback type</label>
-        <select id="feedbackType" name="type" required>
-          <option value="Suggestion">Suggestion</option>
-          <option value="Comment">Comment</option>
-          <option value="Bug Report">Bug report</option>
-        </select>
-
-        <label for="feedbackMessage">Your message</label>
-        <textarea id="feedbackMessage" name="message" maxlength="1000" rows="4" placeholder="Write your comment or suggestion..." required></textarea>
-
-        <button class="primary-btn full-btn" id="submitFeedbackBtn" type="submit">Submit feedback</button>
-        <p class="feedback-status" id="feedbackStatus" role="status" aria-live="polite"></p>
-      </form>
-    </section>
   </aside>
 
   <aside class="settings-drawer" id="historyDrawer" aria-hidden="true">
@@ -189,6 +172,51 @@
     <p class="history-status" id="historyStatus">Open history to load saved games.</p>
     <ul class="history-list" id="historyList"></ul>
     <button class="primary-btn full-btn" id="refreshHistoryBtn" type="button">Refresh history</button>
+  </aside>
+
+  <aside class="settings-drawer" id="feedbackDrawer" aria-hidden="true" aria-labelledby="feedbackTitle">
+    <div class="drawer-header">
+      <div>
+        <h2 id="feedbackTitle">Suggestions &amp; comments</h2>
+        <p>Share an idea, a comment, or a problem you found.</p>
+      </div>
+      <button class="icon-btn" id="closeFeedbackBtn" type="button" aria-label="Close suggestions">✕</button>
+    </div>
+
+    <form class="feedback-form" id="feedbackForm" novalidate>
+      <fieldset class="feedback-types">
+        <legend>What kind of message is this?</legend>
+        <label class="type-option">
+          <input type="radio" name="feedbackType" value="suggestion" checked>
+          <span>💡 Suggestion</span>
+        </label>
+        <label class="type-option">
+          <input type="radio" name="feedbackType" value="comment">
+          <span>💬 Comment</span>
+        </label>
+        <label class="type-option">
+          <input type="radio" name="feedbackType" value="bug">
+          <span>🐞 Problem</span>
+        </label>
+      </fieldset>
+
+      <label class="field-label" for="feedbackMessage">Your message</label>
+      <textarea class="field" id="feedbackMessage" name="message" rows="6" maxlength="500"
+        placeholder="What would make this game better?" required></textarea>
+      <p class="field-hint"><span id="feedbackCount">0 / 500</span></p>
+
+      <label class="field-label" for="feedbackName">Name (optional)</label>
+      <input class="field" id="feedbackName" name="name" type="text" maxlength="40" autocomplete="nickname">
+
+      <!-- Spam trap: real people never see or fill this in -->
+      <div class="hp" aria-hidden="true">
+        <label for="feedbackWebsite">Website</label>
+        <input id="feedbackWebsite" name="website" type="text" tabindex="-1" autocomplete="off">
+      </div>
+
+      <p class="feedback-status" id="feedbackStatus" role="status" aria-live="polite"></p>
+      <button class="primary-btn full-btn" id="sendFeedbackBtn" type="submit">Send message</button>
+    </form>
   </aside>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
