@@ -1,7 +1,7 @@
 /* Supabase stores game results and comments. The publishable key is safe to put in
    front-end code; row-level security decides what it is allowed to do. */
 const SUPABASE_URL = "https://ucydyufnxgcsetjasskl.supabase.co";
-const SUPABASE_ANON_KEY = "YOUR_SUPABASE_PUBLISHABLE_KEY";
+const SUPABASE_ANON_KEY = "ILAGAY_DITO_ANG_PUBLISHABLE_KEY_MO";
 
 const $ = selector => document.querySelector(selector);
 const $$ = selector => [...document.querySelectorAll(selector)];
