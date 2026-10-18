@@ -2,125 +2,171 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#F5EBDD">
   <title>Tic-Tac-Toe</title>
   <link rel="stylesheet" href="style.css">
-  <script src="game.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+  <script src="script.js" defer></script>
 </head>
 <body>
-  <main class="game-container">
-    <header class="top-bar">
-      <div>
-        <h1>Tic-Tac-Toe</h1>
-        <p class="subtitle">Simple game, smart moves.</p>
-      </div>
-      <button id="menuButton" class="icon-button" aria-label="Open menu">☰</button>
-    </header>
+  <header class="top">
+    <h1>Tic-Tac-Toe</h1>
+    <button class="ghost" id="menuBtn" type="button" aria-expanded="false" hidden>⚙ Settings</button>
+  </header>
 
-    <section class="scoreboard" aria-label="Scoreboard">
-      <div class="score-card active" id="xCard">
-        <span class="player-symbol">X</span>
-        <span>Player X</span>
-        <strong id="xScore">0</strong>
-      </div>
-      <div class="score-card" id="drawCard">
-        <span class="player-symbol">＝</span>
-        <span>Draws</span>
-        <strong id="drawScore">0</strong>
-      </div>
-      <div class="score-card" id="oCard">
-        <span class="player-symbol">O</span>
-        <span>Player O</span>
-        <strong id="oScore">0</strong>
-      </div>
-    </section>
+  <section class="card" id="auth" hidden>
+    <div class="tabs" role="group" aria-label="Account">
+      <button class="mode on" id="tabLogin" type="button">Log in</button>
+      <button class="mode" id="tabSignup" type="button">Create account</button>
+    </div>
 
-    <section class="game-panel">
-      <p id="status" class="status" aria-live="polite">Player X's turn</p>
+    <label class="field" id="userField" hidden>
+      Username
+      <input id="username" type="text" maxlength="20" autocomplete="username"
+        placeholder="3–20 letters, numbers or _">
+    </label>
 
-      <div class="board" id="board" role="group" aria-label="Tic-Tac-Toe board">
-        <button class="cell" data-index="0" aria-label="Cell 1"></button>
-        <button class="cell" data-index="1" aria-label="Cell 2"></button>
-        <button class="cell" data-index="2" aria-label="Cell 3"></button>
-        <button class="cell" data-index="3" aria-label="Cell 4"></button>
-        <button class="cell" data-index="4" aria-label="Cell 5"></button>
-        <button class="cell" data-index="5" aria-label="Cell 6"></button>
-        <button class="cell" data-index="6" aria-label="Cell 7"></button>
-        <button class="cell" data-index="7" aria-label="Cell 8"></button>
-        <button class="cell" data-index="8" aria-label="Cell 9"></button>
-      </div>
+    <label class="field">Email
+      <input id="email" type="email" autocomplete="email">
+    </label>
 
-      <div class="game-actions">
-        <button id="restartButton" class="primary-button">↻ Restart Round</button>
-        <button id="resetScoreButton" class="secondary-button">Reset Scores</button>
-      </div>
-    </section>
+    <label class="field">Password
+      <input id="password" type="password" minlength="6" autocomplete="current-password">
+    </label>
 
-    <section class="help-panel">
-      <h2>How to play</h2>
-      <p>Take turns placing X and O. The first player to get three in a row wins.</p>
-    </section>
+    <p class="muted" id="authMsg" role="status"></p>
+    <button class="primary" id="authGo" type="button">Log in</button>
+    <button class="link" id="guestBtn" type="button">
+      Continue as guest (no online play or history)
+    </button>
+  </section>
 
-    <footer>
-      <p>Made for fun · Play fair · Have fun!</p>
-    </footer>
+  <main class="card" id="app" hidden>
+    <div class="modes" role="group" aria-label="Game mode">
+      <button class="mode on" id="aiBtn" type="button" aria-pressed="true">🤖 Computer</button>
+      <button class="mode" id="twoBtn" type="button" aria-pressed="false">👥 Same device</button>
+      <button class="mode" id="onlineBtn" type="button" aria-pressed="false">🌐 Online</button>
+    </div>
+
+    <p class="status" id="status" aria-live="polite"></p>
+
+    <div class="area" id="gameArea">
+      <div class="board" id="board" role="group" aria-label="Game board"></div>
+      <button class="primary" id="newBtn" type="button">New round</button>
+    </div>
+
+    <div id="lobby" hidden>
+      <p class="muted" id="lobbyHi"></p>
+      <button class="primary" id="createBtn" type="button">Create a private room</button>
+
+      <label class="field">Join a friend with their room code
+        <input id="joinCode" type="text" maxlength="4" autocomplete="off" placeholder="K7QD">
+      </label>
+
+      <button class="mode" id="joinBtn" type="button">Join room</button>
+      <button class="mode" id="quickBtn" type="button">Find a random opponent</button>
+      <p class="muted" id="lobbyMsg" role="status"></p>
+    </div>
+
+    <div class="scores" id="scores">
+      <div><span>Player X</span><strong id="sx">0</strong></div>
+      <div><span>O / Computer</span><strong id="so">0</strong></div>
+      <div><span>Draws</span><strong id="sd">0</strong></div>
+    </div>
   </main>
 
-  <!-- Menu drawer -->
-  <div id="overlay" class="overlay"></div>
-  <aside id="menuDrawer" class="drawer" aria-hidden="true">
-    <div class="drawer-header">
-      <h2>Game Menu</h2>
-      <button id="closeMenuButton" class="icon-button" aria-label="Close menu">✕</button>
-    </div>
+  <div class="backdrop" id="backdrop" hidden></div>
 
-    <button id="menuRestartButton" class="menu-item">↻ Restart Round</button>
-    <button id="menuResetButton" class="menu-item">↺ Reset Scores</button>
-    <button id="themeButton" class="menu-item">☾ Toggle Dark Mode</button>
-    <button id="feedbackButton" class="menu-item">✉ Suggestions & Comments</button>
+  <!-- Settings drawer -->
+  <aside class="drawer" id="drawer" aria-hidden="true">
+    <button class="ghost close-button" id="closeBtn" type="button"
+      aria-label="Close settings">✕</button>
 
-    <p class="drawer-note">Your feedback is saved in this browser on this device.</p>
+    <h2>Settings</h2>
+    <h3>GAME</h3>
+
+    <button class="row" id="histBtn" type="button">
+      <span>🕘 Game history</span><span>›</span>
+    </button>
+
+    <!-- Comments and suggestions button -->
+    <button class="row" id="fbBtn" type="button">
+      <span>💬 Comments &amp; suggestions</span><span>›</span>
+    </button>
+
+    <button class="row" id="logoutBtn" type="button">
+      <span id="logoutLabel">Log out</span><span>›</span>
+    </button>
+
+    <h3>SOUND</h3>
+    <button class="row" id="soundBtn" type="button">
+      <span id="soundLabel">Sound effects: on</span>
+      <span class="sw on" id="sw" aria-hidden="true"></span>
+    </button>
+
+    <h3>THEME</h3>
+    <div class="themes" id="themes"></div>
   </aside>
 
-  <!-- Feedback drawer -->
-  <aside id="feedbackDrawer" class="drawer" aria-hidden="true">
-    <div class="drawer-header">
-      <h2>Suggestions & Comments</h2>
-      <button id="closeFeedbackButton" class="icon-button" aria-label="Close feedback">✕</button>
-    </div>
+  <!-- Game history drawer -->
+  <aside class="drawer" id="histDrawer" aria-hidden="true">
+    <button class="ghost close-button" id="closeHist" type="button"
+      aria-label="Close history">✕</button>
 
-    <p class="feedback-description">
-      Have an idea to improve the game? Leave a comment or suggestion below.
-    </p>
+    <h2>Game history</h2>
+    <p class="muted" id="histStatus">Open history to load saved games.</p>
+    <ul class="hist" id="histList"></ul>
 
-    <form id="feedbackForm">
-      <label for="feedbackName">Name (optional)</label>
-      <input id="feedbackName" type="text" maxlength="50" placeholder="Your name">
+    <button class="primary full-width" id="refreshHist" type="button">
+      Refresh history
+    </button>
+  </aside>
 
-      <label for="feedbackType">Feedback type</label>
-      <select id="feedbackType" required>
-        <option value="Suggestion">Suggestion</option>
-        <option value="Comment">Comment</option>
-        <option value="Bug report">Bug report</option>
+  <!-- Comments and suggestions drawer -->
+  <aside class="drawer" id="fbDrawer" aria-hidden="true">
+    <button class="ghost close-button" id="closeFb" type="button"
+      aria-label="Close feedback">✕</button>
+
+    <h2>Comments &amp; suggestions</h2>
+    <p class="muted">Tell us what you think or what we should add.</p>
+
+    <label class="field" for="fbType">Feedback type
+      <select id="fbType">
+        <option value="comment">Comment</option>
+        <option value="suggestion">Suggestion</option>
+        <option value="bug">Problem to fix</option>
       </select>
+    </label>
 
-      <label for="feedbackMessage">Your message</label>
-      <textarea id="feedbackMessage" rows="5" maxlength="1000"
-        placeholder="Write your suggestion or comment..." required></textarea>
+    <label class="field" for="fbName">Name (optional)
+      <input id="fbName" type="text" maxlength="40" autocomplete="name"
+        placeholder="Enter your name">
+    </label>
 
-      <button type="submit" class="primary-button full-width">Save Feedback</button>
-    </form>
+    <label class="field" for="fbMsg">Your message
+      <textarea id="fbMsg" maxlength="500" required
+        placeholder="Write your comment or suggestion here..."></textarea>
+      <span class="count" id="fbCount">0 / 500</span>
+    </label>
 
-    <p id="feedbackStatus" class="feedback-status" aria-live="polite"></p>
+    <p class="muted" id="fbStatus" role="status" aria-live="polite"></p>
 
-    <div class="saved-feedback-header">
-      <h3>Saved feedback</h3>
-      <button id="clearFeedbackButton" class="text-button" type="button">Clear all</button>
-    </div>
-
-    <div id="feedbackList" class="feedback-list">
-      <p class="empty-feedback">No feedback saved yet.</p>
-    </div>
+    <button class="primary full-width" id="fbSend" type="button">
+      Send feedback
+    </button>
   </aside>
+
+  <!-- Victory / draw modal -->
+  <div class="modal" id="modal" role="dialog" aria-modal="true"
+    aria-labelledby="mTitle" hidden>
+    <div class="panel">
+      <h2 id="mTitle"></h2>
+      <p id="mText"></p>
+      <button class="primary" id="againBtn" type="button">Play again</button>
+    </div>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 </body>
 </html>
