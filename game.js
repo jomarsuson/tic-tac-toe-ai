@@ -1,160 +1,312 @@
-"use strict";
 
-// -------------------- GAME SETUP --------------------
+const API_URL = "https://tic-tac-toe-backend-1vkx.onrender.com";
 
-const cells = [...document.querySelectorAll(".cell")];
-const statusText = document.getElementById("status");
+const $ = selector => document.querySelector(selector);
+const $$ = selector => [...document.querySelectorAll(selector)];
 
-const aiModeBtn = document.getElementById("aiMode");
-const twoModeBtn = document.getElementById("twoMode");
-const restartBtn = document.getElementById("restartBtn");
-const resetScoreBtn = document.getElementById("resetScoreBtn");
-
-const xScoreText = document.getElementById("xScore");
-const oScoreText = document.getElementById("oScore");
-const drawScoreText = document.getElementById("drawScore");
-
-const winningLines = [
-  [0, 1, 2],
-  [3, 4, 5],
-  [6, 7, 8],
-  [0, 3, 6],
-  [1, 4, 7],
-  [2, 5, 8],
-  [0, 4, 8],
-  [2, 4, 6]
-];
+const canvas = $("#layoutCanvas");
+const cells = $$(".cell");
+const statusText = $("#status");
+const settingsDrawer = $("#settingsDrawer");
+const historyDrawer = $("#historyDrawer");
+const backdrop = $("#drawerBackdrop");
+const editToolbar = $("#editToolbar");
 
 let board = Array(9).fill("");
-let currentPlayer = "X";
-let gameOver = false;
-let gameMode = "ai";
-let scores = { X: 0, O: 0, draws: 0 };
-let aiTimer = null;
+let gameActive = false;
+let aiThinking = false;
+let resultSaved = false;
+let mode = "ai";
+let soundOn = localStorage.getItem("tttSound") !== "false";
+let scores = { player: 0, ai: 0, draws: 0 };
+let audioContext = null;
+let toastTimer;
 
-function getWinner() {
-  for (const line of winningLines) {
-    const [a, b, c] = line;
+const wins = [
+  [0, 1, 2], [3, 4, 5], [6, 7, 8],
+  [0, 3, 6], [1, 4, 7], [2, 5, 8],
+  [0, 4, 8], [2, 4, 6]
+];
 
-    if (board[a] && board[a] === board[b] && board[a] === board[c]) {
-      return { player: board[a], line };
+const themes = {
+  chocolate: {
+    page: "#F5EBDD", card: "#FFF9F0",
+    accent: "#80543D", text: "#38241D",
+    muted: "#806B5A", border: "#D9C5AF", cell: "#F5EBDD"
+  },
+  dark: {
+    page: "#171717", card: "#262626",
+    accent: "#C59A6B", text: "#F7F0E8",
+    muted: "#C2B7AB", border: "#51463C", cell: "#202020"
+  },
+  ocean: {
+    page: "#EAF3FA", card: "#FFFFFF",
+    accent: "#246B9E", text: "#17334A",
+    muted: "#58758A", border: "#BED4E4", cell: "#EAF3FA"
+  },
+  forest: {
+    page: "#EAF1E8", card: "#FFFFFF",
+    accent: "#386641", text: "#233B28",
+    muted: "#647A68", border: "#C5D5C3", cell: "#EAF1E8"
+  },
+  purple: {
+    page: "#211A35", card: "#302644",
+    accent: "#A78BFA", text: "#F5EEFF",
+    muted: "#C5B8DD", border: "#594875", cell: "#261F3A"
+  }
+};
+
+function showToast(message) {
+  const toast = $("#toast");
+  toast.textContent = message;
+  toast.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toast.classList.remove("show"), 2400);
+}
+
+function setStatus(message) {
+  statusText.textContent = message;
+}
+
+function playSound(frequency = 440, duration = 0.09) {
+  if (!soundOn) return;
+
+  try {
+    audioContext ||= new (
+      window.AudioContext || window.webkitAudioContext
+    )();
+
+    if (audioContext.state === "suspended") {
+      audioContext.resume();
+    }
+
+    const oscillator = audioContext.createOscillator();
+    const gain = audioContext.createGain();
+
+    oscillator.frequency.value = frequency;
+    oscillator.type = "sine";
+    gain.gain.setValueAtTime(0.08, audioContext.currentTime);
+    gain.gain.exponentialRampToValueAtTime(
+      0.001,
+      audioContext.currentTime + duration
+    );
+
+    oscillator.connect(gain);
+    gain.connect(audioContext.destination);
+    oscillator.start();
+    oscillator.stop(audioContext.currentTime + duration);
+  } catch {
+    // Sound is optional if the browser does not support audio.
+  }
+}
+
+function setMode(newMode) {
+  mode = newMode;
+  $("#aiModeBtn").classList.toggle("active", mode === "ai");
+  $("#twoPlayerBtn").classList.toggle("active", mode === "two");
+  startGame();
+}
+
+function startGame() {
+  $("#victoryOverlay")?.remove();
+  cells.forEach(cell => cell.classList.remove("winning-cell"));
+
+  board = Array(9).fill("");
+  gameActive = true;
+  aiThinking = false;
+  resultSaved = false;
+
+  cells.forEach((cell, index) => {
+    cell.textContent = "";
+    cell.disabled = false;
+    cell.setAttribute("aria-label", `Cell ${index + 1}, empty`);
+  });
+
+  setStatus(mode === "ai" ? "Your turn — X" : "Player X's turn");
+}
+
+function checkWinner(position) {
+  for (const [a, b, c] of wins) {
+    if (
+      position[a] &&
+      position[a] === position[b] &&
+      position[b] === position[c]
+    ) {
+      return position[a];
     }
   }
 
-  return null;
+  return position.every(Boolean) ? "draw" : null;
 }
 
-function renderBoard() {
-  cells.forEach((cell, index) => {
-    cell.textContent = board[index];
-    cell.disabled = gameOver || board[index] !== "";
+function getWinningLine(position) {
+  return wins.find(([a, b, c]) =>
+    position[a] &&
+    position[a] === position[b] &&
+    position[b] === position[c]
+  ) || [];
+}
 
-    cell.classList.toggle("marked", board[index] !== "");
-    cell.classList.remove("winner");
+function showVictoryEffect(result) {
+  $("#victoryOverlay")?.remove();
 
-    cell.setAttribute(
-      "aria-label",
-      `Cell ${index + 1}, ${board[index] || "empty"}`
-    );
+  const title = result === "draw"
+    ? "IT'S A DRAW!"
+    : result === "X"
+      ? (mode === "ai" ? "YOU WIN!" : "PLAYER X WINS!")
+      : (mode === "ai" ? "AI WINS!" : "PLAYER O WINS!");
+
+  const overlay = document.createElement("div");
+  overlay.id = "victoryOverlay";
+  overlay.className =
+    `victory-overlay ${result === "draw" ? "is-draw" : "is-win"}`;
+
+  overlay.setAttribute("role", "dialog");
+  overlay.setAttribute("aria-modal", "true");
+  overlay.setAttribute("aria-label", title);
+
+  const panel = document.createElement("div");
+  panel.className = "victory-panel";
+
+  const heading = document.createElement("h2");
+  heading.textContent = title;
+
+  const message = document.createElement("p");
+  message.textContent = result === "draw"
+    ? "A close match. Try again!"
+    : result === "X"
+      ? "Great move. You played well!"
+      : "Better luck next round!";
+
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "victory-play-again";
+  button.textContent = "PLAY AGAIN";
+
+  button.addEventListener("click", () => {
+    overlay.remove();
+    startGame();
+    playSound(500, 0.12);
   });
+
+  panel.append(heading, message, button);
+  overlay.append(panel);
+  document.body.append(overlay);
+
+  if (result !== "draw") {
+    for (let i = 0; i < 48; i++) {
+      const bit = document.createElement("span");
+      bit.className = "confetti-piece";
+      bit.style.left = `${Math.random() * 100}%`;
+      bit.style.animationDelay = `${Math.random() * 0.7}s`;
+      bit.style.setProperty(
+        "--confetti-rotate",
+        `${Math.random() * 720 - 360}deg`
+      );
+      overlay.append(bit);
+    }
+  }
+
+  button.focus();
 }
 
-function updateScores() {
-  xScoreText.textContent = scores.X;
-  oScoreText.textContent = scores.O;
-  drawScoreText.textContent = scores.draws;
+function updateCell(index, mark) {
+  board[index] = mark;
+  cells[index].textContent = mark;
+  cells[index].setAttribute("aria-label", `Cell ${index + 1}, ${mark}`);
+  cells[index].disabled = true;
+  playSound(mark === "X" ? 520 : 360);
 }
 
-function updateStatus(message, isWin = false) {
-  statusText.textContent = message;
-  statusText.classList.toggle("win", isWin);
-}
+function handleCellClick(event) {
+  const index = Number(event.currentTarget.dataset.index);
 
-function finishGame() {
-  const result = getWinner();
+  if (!gameActive || aiThinking || board[index]) return;
 
-  if (result) {
-    gameOver = true;
-    scores[result.player]++;
+  if (mode === "ai") {
+    updateCell(index, "X");
 
-    renderBoard();
+    if (finishIfOver()) return;
 
-    result.line.forEach(index => {
-      cells[index].classList.add("winner");
+    aiThinking = true;
+    cells.forEach(cell => {
+      cell.disabled = true;
     });
 
-    updateStatus(`🎉 Player ${result.player} wins!`, true);
-    updateScores();
-    return true;
-  }
+    setStatus("AI is thinking...");
 
-  if (board.every(cell => cell !== "")) {
-    gameOver = true;
-    scores.draws++;
+    setTimeout(() => {
+      if (!gameActive) return;
 
-    renderBoard();
-    updateStatus("It's a draw! Good game.", false);
-    updateScores();
-    return true;
-  }
+      const move = getBestMove(board);
 
-  return false;
-}
+      if (move !== -1) {
+        updateCell(move, "O");
+      }
 
-// -------------------- PLAYER MOVES --------------------
+      aiThinking = false;
+      cells.forEach((cell, i) => {
+        cell.disabled = !gameActive || Boolean(board[i]);
+      });
 
-function makeMove(index) {
-  if (gameOver || board[index] !== "") return;
-
-  if (gameMode === "ai" && currentPlayer === "O") return;
-
-  board[index] = currentPlayer;
-  cells[index].textContent = currentPlayer;
-  cells[index].classList.add("marked");
-
-  if (finishGame()) return;
-
-  currentPlayer = currentPlayer === "X" ? "O" : "X";
-  renderBoard();
-
-  if (gameMode === "ai" && currentPlayer === "O") {
-    updateStatus("Computer is thinking...");
-    aiTimer = setTimeout(makeAIMove, 350);
+      if (!finishIfOver()) {
+        setStatus("Your turn — X");
+      }
+    }, 450);
   } else {
-    updateStatus(`Player ${currentPlayer}'s turn`);
+    const mark = board.filter(Boolean).length % 2 === 0 ? "X" : "O";
+    updateCell(index, mark);
+
+    if (!finishIfOver()) {
+      setStatus(mark === "X" ? "Player O's turn" : "Player X's turn");
+    }
   }
 }
 
-function makeAIMove() {
-  aiTimer = null;
+function minimax(position, maximizing, depth = 0) {
+  const result = checkWinner(position);
 
-  if (gameOver || gameMode !== "ai") return;
+  if (result === "O") return 10 - depth;
+  if (result === "X") return depth - 10;
+  if (result === "draw") return 0;
 
-  const move = findBestMove();
+  if (maximizing) {
+    let best = -Infinity;
 
-  if (move === -1) return;
+    for (let i = 0; i < 9; i++) {
+      if (position[i]) continue;
 
-  board[move] = "O";
+      position[i] = "O";
+      best = Math.max(best, minimax(position, false, depth + 1));
+      position[i] = "";
+    }
 
-  if (finishGame()) return;
+    return best;
+  }
 
-  currentPlayer = "X";
-  renderBoard();
-  updateStatus("Your turn — X");
+  let best = Infinity;
+
+  for (let i = 0; i < 9; i++) {
+    if (position[i]) continue;
+
+    position[i] = "X";
+    best = Math.min(best, minimax(position, true, depth + 1));
+    position[i] = "";
+  }
+
+  return best;
 }
 
-// -------------------- SIMPLE MINIMAX AI --------------------
-
-function findBestMove() {
+function getBestMove(position) {
   let bestScore = -Infinity;
   let bestMove = -1;
 
-  for (let i = 0; i < board.length; i++) {
-    if (board[i] !== "") continue;
+  for (let i = 0; i < 9; i++) {
+    if (position[i]) continue;
 
-    board[i] = "O";
-    const score = minimax(board, 0, false);
-    board[i] = "";
+    position[i] = "O";
+    const score = minimax(position, false);
+    position[i] = "";
 
     if (score > bestScore) {
       bestScore = score;
@@ -165,209 +317,517 @@ function findBestMove() {
   return bestMove;
 }
 
-function minimax(position, depth, isMaximizing) {
-  const result = getWinner();
+function finishIfOver() {
+  const result = checkWinner(board);
+  if (!result) return false;
 
-  if (result?.player === "O") return 10 - depth;
-  if (result?.player === "X") return depth;
-  if (position.every(cell => cell !== "")) return 0;
+  gameActive = false;
+  aiThinking = false;
+  cells.forEach(cell => cell.disabled = true);
 
-  if (isMaximizing) {
-    let best = -Infinity;
-
-    for (let i = 0; i < position.length; i++) {
-      if (position[i] !== "") continue;
-
-      position[i] = "O";
-      best = Math.max(best, minimax(position, depth + 1, false));
-      position[i] = "";
-    }
-
-    return best;
+  if (result === "draw") {
+    scores.draws++;
+    setStatus("It's a draw!");
+    playSound(280, 0.2);
+  } else if (result === "X") {
+    scores.player++;
+    setStatus(mode === "ai" ? "You win!" : "Player X wins!");
+    playSound(660, 0.2);
+    getWinningLine(board).forEach(index =>
+      cells[index]?.classList.add("winning-cell")
+    );
+  } else {
+    scores.ai++;
+    setStatus(mode === "ai" ? "AI wins!" : "Player O wins!");
+    playSound(200, 0.2);
+    getWinningLine(board).forEach(index =>
+      cells[index]?.classList.add("winning-cell")
+    );
   }
 
-  let best = Infinity;
+  $("#playerWins").textContent = scores.player;
+  $("#aiWins").textContent = scores.ai;
+  $("#draws").textContent = scores.draws;
 
-  for (let i = 0; i < position.length; i++) {
-    if (position[i] !== "") continue;
-
-    position[i] = "X";
-    best = Math.min(best, minimax(position, depth + 1, true));
-    position[i] = "";
-  }
-
-  return best;
+  saveGameResult(result);
+  setTimeout(() => showVictoryEffect(result), 300);
+  return true;
 }
 
-// -------------------- START / RESTART --------------------
+async function saveGameResult(result) {
+  if (resultSaved) return;
+  resultSaved = true;
 
-function startRound() {
-  clearTimeout(aiTimer);
-  aiTimer = null;
+  const resultName = result === "draw"
+    ? "Draw"
+    : result === "X"
+      ? "Player Wins"
+      : "AI Wins";
 
-  board = Array(9).fill("");
-  currentPlayer = "X";
-  gameOver = false;
+  try {
+    const response = await fetch(`${API_URL}/api/save-game`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ result: resultName })
+    });
 
-  cells.forEach(cell => {
-    cell.classList.remove("winner", "marked");
+    if (!response.ok) throw new Error("Could not save game");
+    loadGameHistory();
+  } catch (error) {
+    console.error("Game history save failed:", error);
+    showToast("Game finished, but saving history failed.");
+  }
+}
+
+/* Settings drawers */
+
+function openDrawer(drawer) {
+  closeDrawers();
+  drawer.classList.add("open");
+  drawer.setAttribute("aria-hidden", "false");
+  backdrop.classList.add("open");
+
+  if (drawer === settingsDrawer) {
+    $("#menuBtn").setAttribute("aria-expanded", "true");
+  }
+}
+
+function closeDrawers() {
+  [settingsDrawer, historyDrawer].forEach(drawer => {
+    drawer.classList.remove("open");
+    drawer.setAttribute("aria-hidden", "true");
   });
 
-  renderBoard();
-  updateStatus("Player X's turn");
+  backdrop.classList.remove("open");
+  $("#menuBtn").setAttribute("aria-expanded", "false");
 }
 
-function setMode(mode) {
-  gameMode = mode;
+$("#menuBtn").addEventListener("click", () => openDrawer(settingsDrawer));
+$("#closeMenuBtn").addEventListener("click", closeDrawers);
+$("#closeHistoryBtn").addEventListener("click", closeDrawers);
+backdrop.addEventListener("click", closeDrawers);
 
-  aiModeBtn.classList.toggle("active", mode === "ai");
-  twoModeBtn.classList.toggle("active", mode === "two");
-
-  aiModeBtn.setAttribute("aria-pressed", mode === "ai");
-  twoModeBtn.setAttribute("aria-pressed", mode === "two");
-
-  startRound();
-}
-
-cells.forEach((cell, index) => {
-  cell.addEventListener("click", () => makeMove(index));
+document.addEventListener("keydown", event => {
+  if (event.key === "Escape") closeDrawers();
 });
 
-aiModeBtn.addEventListener("click", () => setMode("ai"));
-twoModeBtn.addEventListener("click", () => setMode("two"));
-restartBtn.addEventListener("click", startRound);
-
-resetScoreBtn.addEventListener("click", () => {
-  scores = { X: 0, O: 0, draws: 0 };
-  updateScores();
-  startRound();
+$("#historyMenuBtn").addEventListener("click", () => {
+  openDrawer(historyDrawer);
+  loadGameHistory();
 });
 
-// -------------------- SUGGESTIONS & COMMENTS --------------------
+$("#gameSettingsBtn").addEventListener("click", () => {
+  closeDrawers();
+  showToast("Choose a game mode using the buttons on the board.");
+});
 
-const feedbackForm = document.getElementById("feedbackForm");
-const feedbackName = document.getElementById("feedbackName");
-const feedbackType = document.getElementById("feedbackType");
-const feedbackMessage = document.getElementById("feedbackMessage");
-const charCount = document.getElementById("charCount");
-const feedbackStatus = document.getElementById("feedbackStatus");
-const feedbackList = document.getElementById("feedbackList");
-const clearFeedbackBtn = document.getElementById("clearFeedbackBtn");
+$("#aiModeBtn").addEventListener("click", () => setMode("ai"));
+$("#twoPlayerBtn").addEventListener("click", () => setMode("two"));
 
-const STORAGE_KEY = "ticTacToeFeedbackV1";
+$("#startBtn").addEventListener("click", () => {
+  startGame();
+  playSound(500, 0.12);
+});
 
-function loadFeedback() {
-  try {
-    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
-    return Array.isArray(saved) ? saved : [];
-  } catch {
-    return [];
-  }
+$("#restartBtn").addEventListener("click", () => {
+  startGame();
+  playSound(380, 0.1);
+});
+
+$("#backBtn").addEventListener("click", () => {
+  closeDrawers();
+  showToast("You're already on the game screen.");
+});
+
+cells.forEach(cell => {
+  cell.addEventListener("click", handleCellClick);
+});
+
+/* Sound settings */
+
+function updateSoundUI() {
+  $("#soundIcon").textContent = soundOn ? "🔊" : "🔇";
+  $("#soundStatus").textContent = soundOn ? "Sound is on" : "Sound is off";
+  $("#soundSwitch").classList.toggle("on", soundOn);
 }
 
-let feedbackEntries = loadFeedback();
+$("#soundBtn").addEventListener("click", () => {
+  soundOn = !soundOn;
+  localStorage.setItem("tttSound", String(soundOn));
+  updateSoundUI();
 
-function saveFeedback() {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(feedbackEntries));
-    return true;
-  } catch {
-    feedbackStatus.textContent =
-      "Could not save feedback in this browser. Check browser storage settings.";
-    return false;
-  }
-}
+  if (soundOn) playSound(520, 0.1);
+});
 
-function renderFeedback() {
-  feedbackList.replaceChildren();
+/* Themes and custom colors */
 
-  clearFeedbackBtn.hidden = feedbackEntries.length === 0;
+function applyTheme(colors) {
+  const root = document.documentElement;
 
-  if (feedbackEntries.length === 0) {
-    const empty = document.createElement("li");
-    empty.className = "empty-message";
-    empty.textContent = "No feedback submitted yet.";
-    feedbackList.appendChild(empty);
-    return;
-  }
-
-  feedbackEntries.forEach(entry => {
-    const item = document.createElement("li");
-    item.className = "feedback-item";
-
-    const heading = document.createElement("strong");
-    heading.textContent = `${entry.type} — ${entry.name || "Anonymous"}`;
-
-    const message = document.createElement("p");
-    message.textContent = entry.message;
-
-    const date = document.createElement("div");
-    date.className = "feedback-meta";
-    date.textContent = entry.date;
-
-    item.append(heading, message, date);
-    feedbackList.appendChild(item);
+  Object.entries(colors).forEach(([key, value]) => {
+    root.style.setProperty(`--${key}`, value);
   });
 }
 
-feedbackMessage.addEventListener("input", () => {
-  charCount.textContent = `${feedbackMessage.value.length} / 500`;
-});
+function setTheme(name) {
+  const colors = themes[name];
+  if (!colors) return;
 
-feedbackForm.addEventListener("submit", event => {
-  event.preventDefault();
+  applyTheme(colors);
+  localStorage.setItem("tttTheme", name);
+  localStorage.setItem("tttCustomColors", JSON.stringify(colors));
 
-  const message = feedbackMessage.value.trim();
+  $$(".theme-option").forEach(button => {
+    button.classList.toggle("selected", button.dataset.theme === name);
+  });
 
-  if (!message) {
-    feedbackStatus.textContent = "Please enter a message first.";
-    feedbackMessage.focus();
-    return;
-  }
+  $("#backgroundColor").value = colors.page;
+  $("#accentColor").value = colors.accent;
+  $("#cardColor").value = colors.card;
 
-  const entry = {
-    name: feedbackName.value.trim().slice(0, 40),
-    type: feedbackType.value,
-    message: message.slice(0, 500),
-    date: new Date().toLocaleString()
+  showToast(`${name.charAt(0).toUpperCase() + name.slice(1)} theme applied`);
+}
+
+function applyCustomColors() {
+  const previous = JSON.parse(
+    localStorage.getItem("tttCustomColors") ||
+    JSON.stringify(themes.chocolate)
+  );
+
+  const colors = {
+    ...previous,
+    page: $("#backgroundColor").value,
+    accent: $("#accentColor").value,
+    card: $("#cardColor").value,
+    cell: $("#backgroundColor").value
   };
 
-  feedbackEntries.unshift(entry);
+  applyTheme(colors);
+  localStorage.setItem("tttTheme", "custom");
+  localStorage.setItem("tttCustomColors", JSON.stringify(colors));
 
-  // Keep the newest 50 entries.
-  feedbackEntries = feedbackEntries.slice(0, 50);
+  $$(".theme-option").forEach(button => button.classList.remove("selected"));
+}
 
-  if (!saveFeedback()) {
-    feedbackEntries.shift();
-    return;
-  }
-
-  renderFeedback();
-  feedbackForm.reset();
-  charCount.textContent = "0 / 500";
-  feedbackStatus.textContent = "Thank you! Your feedback was saved on this device.";
+$$(".theme-option").forEach(button => {
+  button.addEventListener("click", () => setTheme(button.dataset.theme));
 });
 
-clearFeedbackBtn.addEventListener("click", () => {
-  const confirmed = confirm("Clear all saved feedback from this browser?");
-
-  if (!confirmed) return;
-
-  const previousEntries = feedbackEntries;
-  feedbackEntries = [];
-
-  if (!saveFeedback()) {
-    feedbackEntries = previousEntries;
-    return;
-  }
-
-  renderFeedback();
-  feedbackStatus.textContent = "Saved feedback cleared.";
+["backgroundColor", "accentColor", "cardColor"].forEach(id => {
+  $(`#${id}`).addEventListener("input", applyCustomColors);
 });
 
-// -------------------- INITIALIZE --------------------
+$("#resetThemeBtn").addEventListener("click", () => setTheme("chocolate"));
 
-updateScores();
-renderBoard();
-renderFeedback();
-updateStatus("Player X's turn");
+/* Game history */
+
+async function loadGameHistory() {
+  const list = $("#historyList");
+  const historyStatus = $("#historyStatus");
+
+  historyStatus.textContent = "Loading history...";
+  list.replaceChildren();
+
+  try {
+    const response = await fetch(`${API_URL}/api/game-history`);
+    if (!response.ok) throw new Error("History request failed");
+
+    const data = await response.json();
+    const records = Array.isArray(data)
+      ? data
+      : Array.isArray(data.history)
+        ? data.history
+        : Array.isArray(data.data)
+          ? data.data
+          : [];
+
+    if (!records.length) {
+      historyStatus.textContent =
+        "No saved games yet. Play a game to see results here.";
+      return;
+    }
+
+    historyStatus.textContent = `${records.length} saved result(s)`;
+
+    records.forEach(record => {
+      const item = document.createElement("li");
+      const title = document.createElement("strong");
+      const details = document.createElement("small");
+
+      title.textContent = record.result || "Game result";
+
+      details.textContent = record.created_at
+        ? new Date(record.created_at).toLocaleString()
+        : "Date unavailable";
+
+      item.append(title, details);
+      list.append(item);
+    });
+  } catch (error) {
+    console.error("History loading failed:", error);
+    historyStatus.textContent =
+      "Could not load history. Check your backend connection.";
+  }
+}
+
+$("#refreshHistoryBtn").addEventListener("click", loadGameHistory);
+
+/* Layout editor */
+
+const defaultLayout = {
+  mode:     { x: 5, y: 2,  w: 90, h: 19 },
+  status:   { x: 5, y: 23, w: 90, h: 8 },
+  board:    { x: 20, y: 33, w: 60, h: 45 },
+  controls: { x: 20, y: 80, w: 60, h: 10 },
+  score:    { x: 10, y: 91, w: 80, h: 9 }
+};
+
+let layout = null;
+let dragState = null;
+let layoutSaved = false;
+
+function readCurrentLayout() {
+  const canvasRect = canvas.getBoundingClientRect();
+  const result = {};
+
+  $$(".design-item").forEach(item => {
+    const rect = item.getBoundingClientRect();
+
+    result[item.dataset.layout] = {
+      x: ((rect.left - canvasRect.left) / canvasRect.width) * 100,
+      y: ((rect.top - canvasRect.top) / canvasRect.height) * 100,
+      w: (rect.width / canvasRect.width) * 100,
+      h: (rect.height / canvasRect.height) * 100
+    };
+  });
+
+  return result;
+}
+
+function applyLayoutPositions() {
+  if (!layout) return;
+
+  canvas.classList.add("custom-layout");
+
+  $$(".design-item").forEach(item => {
+    const pos = layout[item.dataset.layout];
+    if (!pos) return;
+
+    item.style.left = `${pos.x}%`;
+    item.style.top = `${pos.y}%`;
+    item.style.width = `${pos.w}%`;
+    item.style.height = `${pos.h}%`;
+  });
+}
+
+function enterLayoutEditor() {
+  closeDrawers();
+
+  if (!canvas.classList.contains("custom-layout")) {
+    layout = readCurrentLayout();
+  } else {
+    layout = JSON.parse(JSON.stringify(layout || defaultLayout));
+  }
+
+  canvas.classList.add("custom-layout", "editing");
+  document.body.classList.add("editing-layout");
+  editToolbar.hidden = false;
+
+  applyLayoutPositions();
+
+  $$(".design-item").forEach(item => {
+    if (!item.querySelector(".resize-handle")) {
+      const handle = document.createElement("button");
+      handle.className = "resize-handle";
+      handle.type = "button";
+      handle.setAttribute("aria-label", `Resize ${item.dataset.layout}`);
+
+      handle.addEventListener("pointerdown", event => {
+        beginDrag(event, item, true);
+      });
+
+      item.append(handle);
+    }
+
+    if (!item._layoutPointerDown) {
+      item._layoutPointerDown = event => {
+        if (event.target.closest(".resize-handle")) return;
+
+        if (event.target.closest("button, input, select")) {
+          if (event.target.closest(".cell")) return;
+          if (!event.target.closest(".mode-section")) return;
+        }
+
+        beginDrag(event, item, false);
+      };
+
+      item.addEventListener("pointerdown", item._layoutPointerDown);
+    }
+  });
+
+  showToast("Layout editor enabled. Drag a section to move it.");
+}
+
+function beginDrag(event, item, resizing) {
+  if (!canvas.classList.contains("editing")) return;
+
+  event.preventDefault();
+  event.stopPropagation();
+
+  const canvasRect = canvas.getBoundingClientRect();
+  const rect = item.getBoundingClientRect();
+
+  dragState = {
+    item,
+    resizing,
+    pointerId: event.pointerId,
+    startX: event.clientX,
+    startY: event.clientY,
+    x: rect.left - canvasRect.left,
+    y: rect.top - canvasRect.top,
+    w: rect.width,
+    h: rect.height,
+    canvasWidth: canvasRect.width,
+    canvasHeight: canvasRect.height
+  };
+
+  item.classList.add("dragging");
+  item.setPointerCapture?.(event.pointerId);
+}
+
+document.addEventListener("pointermove", event => {
+  if (!dragState || event.pointerId !== dragState.pointerId) return;
+
+  const d = dragState;
+  const dx = event.clientX - d.startX;
+  const dy = event.clientY - d.startY;
+  const canvasRect = canvas.getBoundingClientRect();
+
+  if (d.resizing) {
+    const maxW = canvasRect.width - d.x;
+    const maxH = canvasRect.height - d.y;
+    const width = Math.max(100, Math.min(maxW, d.w + dx));
+    const height = Math.max(70, Math.min(maxH, d.h + dy));
+
+    d.item.style.width = `${(width / canvasRect.width) * 100}%`;
+    d.item.style.height = `${(height / canvasRect.height) * 100}%`;
+  } else {
+    const x = Math.max(0, Math.min(canvasRect.width - d.w, d.x + dx));
+    const y = Math.max(0, Math.min(canvasRect.height - d.h, d.y + dy));
+
+    d.item.style.left = `${(x / canvasRect.width) * 100}%`;
+    d.item.style.top = `${(y / canvasRect.height) * 100}%`;
+  }
+});
+
+function finishDrag() {
+  if (!dragState) return;
+  dragState.item.classList.remove("dragging");
+  dragState = null;
+}
+
+document.addEventListener("pointerup", finishDrag);
+document.addEventListener("pointercancel", finishDrag);
+
+function saveLayout() {
+  layout = {};
+
+  $$(".design-item").forEach(item => {
+    layout[item.dataset.layout] = {
+      x: parseFloat(item.style.left) || 0,
+      y: parseFloat(item.style.top) || 0,
+      w: parseFloat(item.style.width) || 100,
+      h: parseFloat(item.style.height) || 10
+    };
+  });
+
+  localStorage.setItem("tttCustomLayout", JSON.stringify(layout));
+  layoutSaved = true;
+  showToast("Your layout has been saved!");
+}
+
+function exitLayoutEditor() {
+  canvas.classList.remove("editing");
+  document.body.classList.remove("editing-layout");
+  editToolbar.hidden = true;
+
+  $$(".resize-handle").forEach(handle => handle.remove());
+  $$(".design-item").forEach(item => item.classList.remove("dragging"));
+
+  if (!layoutSaved) {
+    const stored = localStorage.getItem("tttCustomLayout");
+
+    if (stored) {
+      try {
+        layout = JSON.parse(stored);
+        applyLayoutPositions();
+      } catch {
+        canvas.classList.remove("custom-layout");
+      }
+    } else {
+      canvas.classList.remove("custom-layout");
+      $$(".design-item").forEach(item => item.removeAttribute("style"));
+    }
+  }
+
+  layoutSaved = false;
+}
+
+function resetLayout() {
+  localStorage.removeItem("tttCustomLayout");
+  layout = null;
+  layoutSaved = false;
+
+  canvas.classList.remove("custom-layout", "editing");
+  document.body.classList.remove("editing-layout");
+  editToolbar.hidden = true;
+
+  $$(".resize-handle").forEach(handle => handle.remove());
+  $$(".design-item").forEach(item => item.removeAttribute("style"));
+
+  showToast("Default layout restored.");
+}
+
+$("#customizeLayoutBtn").addEventListener("click", enterLayoutEditor);
+$("#saveLayoutBtn").addEventListener("click", saveLayout);
+$("#doneLayoutBtn").addEventListener("click", exitLayoutEditor);
+$("#resetLayoutBtn").addEventListener("click", resetLayout);
+
+/* Restore saved preferences */
+
+function restorePreferences() {
+  const savedTheme = localStorage.getItem("tttTheme") || "chocolate";
+  const savedColors = localStorage.getItem("tttCustomColors");
+
+  if (savedTheme === "custom" && savedColors) {
+    try {
+      const colors = JSON.parse(savedColors);
+      applyTheme(colors);
+
+      $("#backgroundColor").value = colors.page;
+      $("#accentColor").value = colors.accent;
+      $("#cardColor").value = colors.card;
+    } catch {
+      setTheme("chocolate");
+    }
+  } else {
+    setTheme(themes[savedTheme] ? savedTheme : "chocolate");
+  }
+
+  const savedLayout = localStorage.getItem("tttCustomLayout");
+
+  if (savedLayout) {
+    try {
+      layout = JSON.parse(savedLayout);
+      applyLayoutPositions();
+    } catch {
+      localStorage.removeItem("tttCustomLayout");
+      layout = null;
+    }
+  }
+
+  updateSoundUI();
+}
+
+restorePreferences();
+startGame();
