@@ -459,7 +459,7 @@ async function supabaseInsert(table, row) {
     throw error;
   }
 
-  return fetchWithTimeout(`${SUPABASE_URL}/rest/v1/${table}`, {
+  const response = await fetchWithTimeout(`${SUPABASE_URL}/rest/v1/${table}`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -468,6 +468,14 @@ async function supabaseInsert(table, row) {
     },
     body: JSON.stringify(row)
   }, 60000);
+
+  if (!response.ok && response.status !== 409) {
+    response.clone().text()
+      .then(text => console.warn(`Supabase replied ${response.status} for "${table}":`, text))
+      .catch(() => {});
+  }
+
+  return response;
 }
 
 function resultLabel(result) {
@@ -807,18 +815,15 @@ function writeFeedbackQueue(queue) {
    (retrying a rejected one would never help). Throws when it should be retried. */
 async function postFeedback(entry) {
   const response = await supabaseInsert("suggestions", { message: entry.message });
+  if (response.ok) return;
 
-  if ([400, 413, 422].includes(response.status)) return;
-
-  if (!response.ok) {
-    const error = new Error(`Feedback request failed (${response.status})`);
-    // 401/403 = wrong key or missing insert policy, 404 = the suggestions table doesn't exist yet
-    error.setup = [401, 403, 404].includes(response.status);
-    if (error.setup) {
-      console.warn("Comments box: Supabase refused the message. Check the key in game.js and that supabase-setup.sql was run.");
-    }
-    throw error;
+  const error = new Error(`Feedback request failed (${response.status})`);
+  // These mean the Supabase setup needs attention (key, table or columns), not the connection
+  error.setup = [400, 401, 403, 404, 422].includes(response.status);
+  if (error.setup) {
+    console.warn("Comments box: Supabase refused the message. Run supabase-setup.sql again and check the key in game.js.");
   }
+  throw error;
 }
 
 /* Messages that couldn't be delivered earlier are retried when the box is opened */
