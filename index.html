@@ -1,116 +1,199 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#f5ebdd">
-  <title>Tic-Tac-Toe</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tic-Tac-Toe | Play & Customize</title>
   <link rel="stylesheet" href="style.css">
   <script src="game.js" defer></script>
 </head>
 <body>
   <header class="topbar">
-    <h1>Tic-Tac-Toe</h1>
-    <p>Think. Play. Win.</p>
+    <button class="icon-btn" id="backBtn" type="button">← Back</button>
+    <div class="brand">
+      <h1>Tic-Tac-Toe</h1>
+      <p>THINK · PLAY · WIN</p>
+    </div>
+    <button class="icon-btn menu-btn" id="menuBtn" type="button"
+      aria-label="Open settings" aria-expanded="false">☰ Menu</button>
   </header>
 
-  <main class="container">
-    <section class="game-card">
-      <h2>Let's Play!</h2>
-      <p class="intro">Choose a mode and get three in a row.</p>
-
-      <div class="mode-buttons">
-        <button id="aiMode" class="mode-btn active" type="button">
-          Play vs Computer
-        </button>
-        <button id="twoMode" class="mode-btn" type="button">
-          Two Players
-        </button>
+  <main>
+    <div class="edit-toolbar" id="editToolbar" hidden>
+      <div>
+        <strong>Customize your layout</strong>
+        <p>Drag sections to rearrange them.</p>
       </div>
-
-      <p id="status" class="status" role="status" aria-live="polite">
-        Player X's turn
-      </p>
-
-      <div class="board" role="group" aria-label="Tic-Tac-Toe board">
-        <button class="cell" data-index="0" aria-label="Cell 1, empty"></button>
-        <button class="cell" data-index="1" aria-label="Cell 2, empty"></button>
-        <button class="cell" data-index="2" aria-label="Cell 3, empty"></button>
-        <button class="cell" data-index="3" aria-label="Cell 4, empty"></button>
-        <button class="cell" data-index="4" aria-label="Cell 5, empty"></button>
-        <button class="cell" data-index="5" aria-label="Cell 6, empty"></button>
-        <button class="cell" data-index="6" aria-label="Cell 7, empty"></button>
-        <button class="cell" data-index="7" aria-label="Cell 8, empty"></button>
-        <button class="cell" data-index="8" aria-label="Cell 9, empty"></button>
+      <div class="toolbar-actions">
+        <button class="secondary-btn" id="resetLayoutBtn" type="button">Reset layout</button>
+        <button class="primary-btn" id="saveLayoutBtn" type="button">Save layout</button>
+        <button class="secondary-btn" id="doneLayoutBtn" type="button">Done</button>
       </div>
+    </div>
 
-      <div class="scoreboard">
-        <div><span>Player X</span><strong id="xScore">0</strong></div>
-        <div><span>Player O</span><strong id="oScore">0</strong></div>
-        <div><span>Draws</span><strong id="drawScore">0</strong></div>
-      </div>
-
-      <div class="game-actions">
-        <button id="restartBtn" class="primary-btn" type="button">
-          Restart Round
-        </button>
-        <button id="resetScoreBtn" class="secondary-btn" type="button">
-          Reset Scores
-        </button>
-      </div>
-    </section>
-
-    <section class="feedback-card">
-      <h2>Suggestions &amp; Comments</h2>
-      <p class="intro">
-        Help us improve the game by sharing your thoughts.
-      </p>
-
-      <form id="feedbackForm">
-        <label for="feedbackName">Name (optional)</label>
-        <input id="feedbackName" name="name" maxlength="40"
-               placeholder="Enter your name">
-
-        <label for="feedbackType">Feedback type</label>
-        <select id="feedbackType" name="type">
-          <option>Suggestion</option>
-          <option>Comment</option>
-          <option>Bug report</option>
-        </select>
-
-        <label for="feedbackMessage">Your message</label>
-        <textarea id="feedbackMessage" name="message"
-                  maxlength="500" rows="4" required
-                  placeholder="Write your suggestion or comment..."></textarea>
-
-        <div class="form-footer">
-          <small id="charCount">0 / 500</small>
-          <button class="primary-btn" type="submit">Submit Feedback</button>
+    <div class="layout-canvas" id="layoutCanvas">
+      <section class="mode-section design-item" data-layout="mode">
+        <div class="section-heading">
+          <h2>Choose your game</h2>
+          <p>Play against the computer or challenge a friend.</p>
         </div>
-      </form>
+        <div class="mode-buttons">
+          <button class="mode-btn active" id="aiModeBtn" type="button">
+            <span class="mode-icon">🤖</span>
+            <span>Play vs AI</span>
+            <small>Challenge the computer</small>
+          </button>
+          <button class="mode-btn" id="twoPlayerBtn" type="button">
+            <span class="mode-icon">👥</span>
+            <span>Two Players</span>
+            <small>Play with a friend</small>
+          </button>
+        </div>
+      </section>
 
-      <p id="feedbackStatus" class="feedback-status" role="status"
-         aria-live="polite"></p>
+      <section class="status-section design-item" data-layout="status" aria-live="polite">
+        <p id="status">Press Start Game to begin!</p>
+      </section>
 
-      <div class="saved-feedback-heading">
-        <h3>Saved feedback</h3>
-        <button id="clearFeedbackBtn" class="text-btn" type="button">
-          Clear
-        </button>
-      </div>
-      <ul id="feedbackList" class="feedback-list">
-        <li class="empty-message">No feedback submitted yet.</li>
-      </ul>
+      <section class="board-section design-item" data-layout="board" aria-label="Game board">
+        <div class="board" role="group" aria-label="Tic-Tac-Toe board">
+          <button class="cell" type="button" data-index="0" aria-label="Cell 1"></button>
+          <button class="cell" type="button" data-index="1" aria-label="Cell 2"></button>
+          <button class="cell" type="button" data-index="2" aria-label="Cell 3"></button>
+          <button class="cell" type="button" data-index="3" aria-label="Cell 4"></button>
+          <button class="cell" type="button" data-index="4" aria-label="Cell 5"></button>
+          <button class="cell" type="button" data-index="5" aria-label="Cell 6"></button>
+          <button class="cell" type="button" data-index="6" aria-label="Cell 7"></button>
+          <button class="cell" type="button" data-index="7" aria-label="Cell 8"></button>
+          <button class="cell" type="button" data-index="8" aria-label="Cell 9"></button>
+        </div>
+      </section>
 
-      <p class="privacy-note">
-        Feedback is stored only in this browser on this device.
-        It is not sent to a server.
-      </p>
-    </section>
+      <section class="controls-section design-item" data-layout="controls">
+        <div class="game-buttons">
+          <button class="primary-btn" id="startBtn" type="button">Start game</button>
+          <button class="secondary-btn" id="restartBtn" type="button">Restart round</button>
+        </div>
+      </section>
+
+      <section class="score-section design-item" data-layout="score" aria-label="Scoreboard">
+        <div class="score-card">
+          <span>Player X</span>
+          <strong id="playerWins">0</strong>
+        </div>
+        <div class="score-card">
+          <span>Player O / AI</span>
+          <strong id="aiWins">0</strong>
+        </div>
+        <div class="score-card">
+          <span>Draws</span>
+          <strong id="draws">0</strong>
+        </div>
+      </section>
+    </div>
   </main>
 
-  <footer>
-    <p>Have fun and play fair!</p>
-  </footer>
+  <div class="drawer-backdrop" id="drawerBackdrop" aria-hidden="true"></div>
+
+  <aside class="settings-drawer" id="settingsDrawer" aria-hidden="true">
+    <div class="drawer-header">
+      <div>
+        <h2>Settings</h2>
+        <p>Customize your game.</p>
+      </div>
+      <button class="icon-btn" id="closeMenuBtn" type="button">✕</button>
+    </div>
+
+    <section class="settings-group">
+      <h3>GAME</h3>
+      <button class="setting-row" id="gameSettingsBtn" type="button">
+        <span class="setting-icon">🎮</span>
+        <span class="setting-copy">
+          <strong>Game mode</strong>
+          <small>Choose AI or two-player mode</small>
+        </span>
+      </button>
+      <button class="setting-row" id="historyMenuBtn" type="button">
+        <span class="setting-icon">🕘</span>
+        <span class="setting-copy">
+          <strong>Game history</strong>
+          <small>View saved results</small>
+        </span>
+      </button>
+      <button class="setting-row" id="customizeLayoutBtn" type="button">
+        <span class="setting-icon">↔️</span>
+        <span class="setting-copy">
+          <strong>Customize layout</strong>
+          <small>Rearrange sections</small>
+        </span>
+      </button>
+      <button class="setting-row" id="soundBtn" type="button">
+        <span class="setting-icon" id="soundIcon">🔊</span>
+        <span class="setting-copy">
+          <strong>Sound effects</strong>
+          <small id="soundStatus">Sound is on</small>
+        </span>
+        <span class="switch on" id="soundSwitch"></span>
+      </button>
+    </section>
+
+    <section class="settings-group">
+      <h3>APPEARANCE</h3>
+      <p class="settings-description">Choose a theme or customize your colors.</p>
+
+      <div class="theme-grid">
+        <button class="theme-option" type="button" data-theme="chocolate">
+          <span class="theme-swatches"><i style="background:#F5EBDD"></i><i style="background:#FFF9F0"></i><i style="background:#80543D"></i></span>
+          <span>Chocolate</span><b class="theme-check">✓</b>
+        </button>
+        <button class="theme-option" type="button" data-theme="dark">
+          <span class="theme-swatches"><i style="background:#171717"></i><i style="background:#262626"></i><i style="background:#C59A6B"></i></span>
+          <span>Dark</span><b class="theme-check">✓</b>
+        </button>
+        <button class="theme-option" type="button" data-theme="ocean">
+          <span class="theme-swatches"><i style="background:#EAF3FA"></i><i style="background:#FFFFFF"></i><i style="background:#246B9E"></i></span>
+          <span>Ocean</span><b class="theme-check">✓</b>
+        </button>
+        <button class="theme-option" type="button" data-theme="forest">
+          <span class="theme-swatches"><i style="background:#EAF1E8"></i><i style="background:#FFFFFF"></i><i style="background:#386641"></i></span>
+          <span>Forest</span><b class="theme-check">✓</b>
+        </button>
+        <button class="theme-option" type="button" data-theme="purple">
+          <span class="theme-swatches"><i style="background:#211A35"></i><i style="background:#302644"></i><i style="background:#A78BFA"></i></span>
+          <span>Purple</span><b class="theme-check">✓</b>
+        </button>
+      </div>
+
+      <label class="custom-color" for="backgroundColor">
+        Background color
+        <input id="backgroundColor" type="color" value="#F5EBDD">
+      </label>
+      <label class="custom-color" for="accentColor">
+        Accent color
+        <input id="accentColor" type="color" value="#80543D">
+      </label>
+      <label class="custom-color" for="cardColor">
+        Card color
+        <input id="cardColor" type="color" value="#FFF9F0">
+      </label>
+      <button class="secondary-btn full-btn" id="resetThemeBtn" type="button">Reset theme</button>
+    </section>
+  </aside>
+
+  <aside class="settings-drawer" id="historyDrawer" aria-hidden="true">
+    <div class="drawer-header">
+      <div>
+        <h2>Game history</h2>
+        <p>Your saved game results.</p>
+      </div>
+      <button class="icon-btn" id="closeHistoryBtn" type="button">✕</button>
+    </div>
+    <p class="history-status" id="historyStatus">Open history to load saved games.</p>
+    <ul class="history-list" id="historyList"></ul>
+    <button class="primary-btn full-btn" id="refreshHistoryBtn" type="button">Refresh history</button>
+  </aside>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
 </body>
 </html>
