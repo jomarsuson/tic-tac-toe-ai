@@ -21,6 +21,7 @@ const cells = $$(".cell");
 const statusText = $("#status") || document.createElement("p");
 const settingsDrawer = $("#settingsDrawer");
 const historyDrawer = $("#historyDrawer");
+const feedbackDrawer = $("#feedbackDrawer");
 const backdrop = $("#drawerBackdrop");
 
 let board = Array(9).fill("");
@@ -113,7 +114,18 @@ function playSound(frequency = 440, duration = 0.09) {
   }
 }
 
+function renderScores() {
+  $("#playerWins").textContent = scores.player;
+  $("#aiWins").textContent = scores.ai;
+  $("#draws").textContent = scores.draws;
+}
+
 function setMode(newMode) {
+  if (newMode !== mode) {
+    scores = { player: 0, ai: 0, draws: 0 };
+    renderScores();
+  }
+
   mode = newMode;
   $("#aiModeBtn").classList.toggle("active", mode === "ai");
   $("#twoPlayerBtn").classList.toggle("active", mode === "two");
@@ -366,9 +378,7 @@ function finishIfOver() {
     );
   }
 
-  $("#playerWins").textContent = scores.player;
-  $("#aiWins").textContent = scores.ai;
-  $("#draws").textContent = scores.draws;
+  renderScores();
 
   saveGameResult(result);
   overlayTimer = setTimeout(() => showVictoryEffect(result), 300);
@@ -420,8 +430,14 @@ async function saveGameResult(result) {
 
 /* Settings drawers */
 
+const drawers = [settingsDrawer, historyDrawer, feedbackDrawer];
+let lastFocus = null;
+
 function openDrawer(drawer) {
-  closeDrawers();
+  const alreadyOpen = drawers.some(d => d.classList.contains("open"));
+  if (!alreadyOpen) lastFocus = document.activeElement;
+
+  closeDrawers({ restoreFocus: false });
   drawer.classList.add("open");
   drawer.setAttribute("aria-hidden", "false");
   backdrop.classList.add("open");
@@ -429,21 +445,30 @@ function openDrawer(drawer) {
   if (drawer === settingsDrawer) {
     $("#menuBtn").setAttribute("aria-expanded", "true");
   }
+
+  // Move keyboard focus into the drawer
+  drawer.querySelector(".icon-btn")?.focus();
 }
 
-function closeDrawers() {
-  [settingsDrawer, historyDrawer].forEach(drawer => {
+function closeDrawers({ restoreFocus = true } = {}) {
+  const wasOpen = drawers.some(d => d.classList.contains("open"));
+
+  drawers.forEach(drawer => {
     drawer.classList.remove("open");
     drawer.setAttribute("aria-hidden", "true");
   });
 
   backdrop.classList.remove("open");
   $("#menuBtn").setAttribute("aria-expanded", "false");
+
+  // Return focus to whatever opened the drawer
+  if (restoreFocus && wasOpen && lastFocus?.focus) lastFocus.focus();
 }
 
 on("#menuBtn", "click", () => openDrawer(settingsDrawer));
 on("#closeMenuBtn", "click", closeDrawers);
 on("#closeHistoryBtn", "click", closeDrawers);
+on("#closeFeedbackBtn", "click", closeDrawers);
 backdrop.addEventListener("click", closeDrawers);
 
 document.addEventListener("keydown", event => {
@@ -453,6 +478,11 @@ document.addEventListener("keydown", event => {
 on("#historyMenuBtn", "click", () => {
   openDrawer(historyDrawer);
   loadGameHistory();
+});
+
+on("#feedbackMenuBtn", "click", () => {
+  openDrawer(feedbackDrawer);
+  flushFeedbackQueue();
 });
 
 on("#aiModeBtn", "click", () => setMode("ai"));
@@ -628,6 +658,127 @@ async function loadGameHistory() {
 
 on("#refreshHistoryBtn", "click", loadGameHistory);
 
+/* Suggestions & comments */
+
+const FEEDBACK_COOLDOWN_MS = 30000;
+const FEEDBACK_QUEUE_KEY = "tttFeedbackQueue";
+const feedbackForm = $("#feedbackForm");
+const feedbackMessage = $("#feedbackMessage");
+const feedbackStatus = $("#feedbackStatus");
+const sendFeedbackBtn = $("#sendFeedbackBtn");
+let lastFeedbackAt = Number(store.get("tttFeedbackLast")) || 0;
+let flushingFeedback = false;
+
+function setFeedbackStatus(message, kind = "") {
+  feedbackStatus.textContent = message;
+  feedbackStatus.className = `feedback-status ${kind}`.trim();
+}
+
+function readFeedbackQueue() {
+  try {
+    const queue = JSON.parse(store.get(FEEDBACK_QUEUE_KEY) || "[]");
+    return Array.isArray(queue) ? queue : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeFeedbackQueue(queue) {
+  if (queue.length) store.set(FEEDBACK_QUEUE_KEY, JSON.stringify(queue.slice(-20)));
+  else store.remove(FEEDBACK_QUEUE_KEY);
+}
+
+/* Returns normally when the server accepted OR permanently rejected the entry
+   (retrying a rejected entry would never help). Throws when it should be retried. */
+async function postFeedback(entry) {
+  const response = await fetchWithTimeout(`${API_URL}/api/suggestions`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(entry)
+  });
+
+  if ([400, 413, 422].includes(response.status)) return;
+  if (!response.ok) throw new Error(`Feedback request failed (${response.status})`);
+}
+
+/* Messages that couldn't be delivered earlier are retried when the box is opened */
+async function flushFeedbackQueue() {
+  if (flushingFeedback) return;
+  const queue = readFeedbackQueue();
+  if (!queue.length) return;
+
+  flushingFeedback = true;
+  const remaining = [];
+
+  for (const entry of queue) {
+    try {
+      await postFeedback(entry);
+    } catch {
+      remaining.push(entry);
+    }
+  }
+
+  writeFeedbackQueue(remaining);
+  flushingFeedback = false;
+}
+
+feedbackMessage?.addEventListener("input", () => {
+  $("#feedbackCount").textContent = `${feedbackMessage.value.length} / 500`;
+  feedbackMessage.removeAttribute("aria-invalid");
+});
+
+feedbackForm?.addEventListener("submit", async event => {
+  event.preventDefault();
+
+  // Hidden spam-trap field: a human never fills it in
+  if ($("#feedbackWebsite").value) {
+    feedbackForm.reset();
+    return;
+  }
+
+  const message = feedbackMessage.value.trim();
+  const name = $("#feedbackName").value.trim();
+  const type = feedbackForm.elements.feedbackType.value;
+
+  if (message.length < 5) {
+    feedbackMessage.setAttribute("aria-invalid", "true");
+    setFeedbackStatus("Write at least 5 characters so we know what you mean.", "error");
+    feedbackMessage.focus();
+    return;
+  }
+
+  const waitMs = FEEDBACK_COOLDOWN_MS - (Date.now() - lastFeedbackAt);
+  if (waitMs > 0) {
+    setFeedbackStatus(`Please wait ${Math.ceil(waitMs / 1000)} seconds before sending another message.`, "error");
+    return;
+  }
+
+  const entry = { type, message, name: name || null };
+
+  sendFeedbackBtn.disabled = true;
+  setFeedbackStatus("Sending… the server may take a moment to wake up.");
+
+  try {
+    await postFeedback(entry);
+    setFeedbackStatus("Thanks! Your message was sent.", "ok");
+    showToast("Message sent. Thank you!");
+  } catch (error) {
+    console.error("Feedback send failed:", error);
+    writeFeedbackQueue([...readFeedbackQueue(), entry]);
+    setFeedbackStatus(
+      "Couldn't reach the server. Your message is saved on this device and will be sent the next time you open this box.",
+      "error"
+    );
+  } finally {
+    lastFeedbackAt = Date.now();
+    store.set("tttFeedbackLast", String(lastFeedbackAt));
+    sendFeedbackBtn.disabled = false;
+  }
+
+  feedbackMessage.value = "";
+  $("#feedbackCount").textContent = "0 / 500";
+});
+
 /* Restore saved preferences */
 
 function restorePreferences() {
@@ -655,56 +806,3 @@ function restorePreferences() {
 
 restorePreferences();
 startGame();
-
-/* Comments and Suggestions
-   Feedback is saved in localStorage on this device.
-   It is not sent to the website owner or backend server.
-*/
-on("#feedbackForm", "submit", event => {
-  event.preventDefault();
-
-  const nameInput = $("#feedbackName");
-  const typeInput = $("#feedbackType");
-  const messageInput = $("#feedbackMessage");
-  const status = $("#feedbackStatus");
-  const submitButton = $("#submitFeedbackBtn");
-
-  const message = messageInput.value.trim();
-
-  if (!message) {
-    status.textContent = "Please enter your comment or suggestion.";
-    status.className = "feedback-status error";
-    messageInput.focus();
-    return;
-  }
-
-  const feedback = {
-    name: nameInput.value.trim() || "Anonymous",
-    type: typeInput.value,
-    message,
-    created_at: new Date().toISOString()
-  };
-
-  let savedFeedback = [];
-
-  try {
-    savedFeedback = JSON.parse(store.get("tttFeedback") || "[]");
-    if (!Array.isArray(savedFeedback)) savedFeedback = [];
-  } catch {
-    savedFeedback = [];
-  }
-
-  savedFeedback.push(feedback);
-  store.set("tttFeedback", JSON.stringify(savedFeedback));
-
-  submitButton.disabled = true;
-  submitButton.textContent = "Submitted";
-  status.textContent = "Thank you! Your feedback has been saved on this device.";
-  status.className = "feedback-status success";
-  $("#feedbackForm").reset();
-
-  setTimeout(() => {
-    submitButton.disabled = false;
-    submitButton.textContent = "Submit feedback";
-  }, 1200);
-});
