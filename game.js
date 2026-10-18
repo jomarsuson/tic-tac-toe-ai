@@ -33,6 +33,7 @@ let board = Array(9).fill("");
 let gameActive = false;
 let aiThinking = false;
 let resultSaved = false;
+let roundId = null;
 let mode = "ai";
 let soundOn = store.get("tttSound") !== "false";
 let scores = { player: 0, ai: 0, draws: 0 };
@@ -149,6 +150,7 @@ function startGame() {
   gameActive = true;
   aiThinking = false;
   resultSaved = false;
+  roundId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
   cells.forEach((cell, index) => {
     cell.textContent = "";
@@ -403,34 +405,98 @@ async function fetchWithTimeout(url, options = {}, ms = 30000) {
   }
 }
 
-async function saveGameResult(result) {
-  if (resultSaved) return;
+/* Game history
+   Every finished game is written to a log on this device the moment it ends, so it
+   appears in the history instantly and survives a refresh. Each entry is then sent
+   to the backend exactly once; entries the server hasn't confirmed are shown as
+   "waiting to upload" and retried later. */
+
+const HISTORY_KEY = "tttHistory";
+const HISTORY_LIMIT = 100;
+let serverHistory = null;
+let syncPromise = null;
+
+function loadStoredHistory() {
+  try {
+    const log = JSON.parse(store.get(HISTORY_KEY) || "[]");
+    return Array.isArray(log) ? log : [];
+  } catch {
+    return [];
+  }
+}
+
+let historyLog = loadStoredHistory();
+
+function persistHistory() {
+  historyLog = historyLog.slice(-HISTORY_LIMIT);
+  store.set(HISTORY_KEY, JSON.stringify(historyLog));
+}
+
+function resultLabel(result) {
+  if (result === "draw") return "Draw";
+  if (mode === "two") return result === "X" ? "Player X Wins" : "Player O Wins";
+  return result === "X" ? "Player Wins" : "AI Wins";
+}
+
+function saveGameResult(result) {
+  if (resultSaved) return;      // one record per round, no matter how often this is called
   resultSaved = true;
 
-  let resultName;
-
-  if (result === "draw") {
-    resultName = "Draw";
-  } else if (mode === "two") {
-    resultName = result === "X" ? "Player X Wins" : "Player O Wins";
-  } else {
-    resultName = result === "X" ? "Player Wins" : "AI Wins";
-  }
-
-  try {
-    const response = await fetchWithTimeout(`${API_URL}/api/save-game`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ result: resultName })
+  if (!historyLog.some(entry => entry.id === roundId)) {
+    historyLog.push({
+      id: roundId,
+      result: resultLabel(result),
+      created_at: new Date().toISOString(),
+      synced: false
     });
-
-    if (!response.ok) throw new Error("Could not save game");
-
-    if (historyDrawer.classList.contains("open")) loadGameHistory();
-  } catch (error) {
-    console.error("Game history save failed:", error);
-    showToast("Game finished, but saving history failed.");
+    persistHistory();
   }
+
+  renderHistory();              // show the new result immediately, no refresh needed
+
+  syncHistory().then(() => {
+    if (historyDrawer.classList.contains("open")) loadGameHistory();
+  });
+}
+
+/* Uploads every unsynced entry once. Overlapping calls share one run, so an entry is never sent twice. */
+function syncHistory({ quiet = false } = {}) {
+  if (syncPromise) return syncPromise;
+
+  syncPromise = (async () => {
+    const tried = new Set();
+    let failed = false;
+    let entry;
+
+    while ((entry = historyLog.find(item => !item.synced && !tried.has(item.id)))) {
+      tried.add(entry.id);
+
+      try {
+        const response = await fetchWithTimeout(`${API_URL}/api/save-game`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ result: entry.result })
+        }, 60000);
+
+        if (!response.ok) throw new Error("Could not save game");
+
+        entry.synced = true;
+        persistHistory();
+      } catch (error) {
+        console.error("Game history save failed:", error);
+        failed = true;
+        break;
+      }
+    }
+
+    if (failed && !quiet) {
+      showToast("Result saved on this device. It will upload when the server responds.");
+    }
+
+    return failed;
+  })().finally(() => { syncPromise = null; });
+
+  return syncPromise;
 }
 
 /* Settings drawers */
@@ -610,19 +676,67 @@ on("#resetThemeBtn", "click", () => setTheme("chocolate"));
 
 /* Game history */
 
-async function loadGameHistory() {
+function newestFirst(records) {
+  const times = records.map(record => Date.parse(record.created_at));
+  if (times.some(Number.isNaN)) return records;   // can't sort reliably, keep the server's order
+
+  return records
+    .map((record, index) => ({ record, time: times[index] }))
+    .sort((a, b) => b.time - a.time)
+    .map(item => item.record);
+}
+
+function renderHistory(note = "") {
   const list = $("#historyList");
   const historyStatus = $("#historyStatus");
+  if (!list || !historyStatus) return;
 
-  historyStatus.textContent = "Loading history...";
+  const pending = historyLog.filter(entry => !entry.synced).reverse();
+  const records = serverHistory
+    ? [...pending, ...newestFirst(serverHistory)]
+    : [...historyLog].reverse();
+
   list.replaceChildren();
 
+  if (!records.length) {
+    historyStatus.textContent =
+      note || "No saved games yet. Play a game to see results here.";
+    return;
+  }
+
+  let summary = `${records.length} saved result(s)`;
+  if (pending.length) summary += ` · ${pending.length} waiting to upload`;
+  historyStatus.textContent = note ? `${summary}. ${note}` : summary;
+
+  records.forEach(record => {
+    const item = document.createElement("li");
+    const title = document.createElement("strong");
+    const details = document.createElement("small");
+
+    title.textContent = record.result || "Game result";
+
+    const when = record.created_at
+      ? new Date(record.created_at).toLocaleString()
+      : "Date unavailable";
+    details.textContent = record.synced === false ? `${when} · waiting to upload` : when;
+
+    item.append(title, details);
+    list.append(item);
+  });
+}
+
+async function loadGameHistory() {
+  renderHistory();                                    // this device's results appear instantly
+  $("#historyStatus").textContent += " Updating…";
+
   try {
+    await syncHistory({ quiet: true });               // upload anything still pending first
+
     const response = await fetchWithTimeout(`${API_URL}/api/game-history`);
     if (!response.ok) throw new Error("History request failed");
 
     const data = await response.json();
-    const records = Array.isArray(data)
+    serverHistory = Array.isArray(data)
       ? data
       : Array.isArray(data.history)
         ? data.history
@@ -630,40 +744,20 @@ async function loadGameHistory() {
           ? data.data
           : [];
 
-    if (!records.length) {
-      historyStatus.textContent =
-        "No saved games yet. Play a game to see results here.";
-      return;
-    }
-
-    historyStatus.textContent = `${records.length} saved result(s)`;
-
-    records.forEach(record => {
-      const item = document.createElement("li");
-      const title = document.createElement("strong");
-      const details = document.createElement("small");
-
-      title.textContent = record.result || "Game result";
-
-      details.textContent = record.created_at
-        ? new Date(record.created_at).toLocaleString()
-        : "Date unavailable";
-
-      item.append(title, details);
-      list.append(item);
-    });
+    renderHistory();
   } catch (error) {
     console.error("History loading failed:", error);
-    historyStatus.textContent =
+    renderHistory(
       error.name === "AbortError"
-        ? "The server took too long to respond. Try again in a moment."
-        : "Could not load history. Check your backend connection.";
+        ? "The server took too long to respond, so results saved on this device are shown."
+        : "Could not reach the server, so results saved on this device are shown."
+    );
   }
 }
 
 on("#refreshHistoryBtn", "click", loadGameHistory);
 
-/* Suggestions & comments */
+/* Comments & suggestions: a single text box, no options */
 
 const FEEDBACK_COOLDOWN_MS = 30000;
 const FEEDBACK_QUEUE_KEY = "tttFeedbackQueue";
@@ -693,11 +787,12 @@ function writeFeedbackQueue(queue) {
   else store.remove(FEEDBACK_QUEUE_KEY);
 }
 
-/* Returns normally when the server accepted OR permanently rejected the entry
-   (retrying a rejected entry would never help). Throws when it should be retried. */
+/* Returns normally when the server accepted OR permanently rejected the message
+   (retrying a rejected one would never help). Throws when it should be retried. */
 async function postFeedback(entry) {
   if (!SUPABASE_ANON_KEY || SUPABASE_ANON_KEY.startsWith("YOUR_")) {
-    throw new Error("Supabase key is not set in game.js");
+    console.warn("Comments box: set SUPABASE_ANON_KEY in game.js to send messages.");
+    throw new Error("Supabase key is not set");
   }
 
   const response = await fetchWithTimeout(`${SUPABASE_URL}/rest/v1/suggestions`, {
@@ -707,7 +802,7 @@ async function postFeedback(entry) {
       apikey: SUPABASE_ANON_KEY,
       Prefer: "return=minimal"
     },
-    body: JSON.stringify(entry)
+    body: JSON.stringify({ message: entry.message })
   });
 
   if ([400, 413, 422].includes(response.status)) return;
@@ -750,12 +845,10 @@ feedbackForm?.addEventListener("submit", async event => {
   }
 
   const message = feedbackMessage.value.trim();
-  const name = $("#feedbackName").value.trim();
-  const type = feedbackForm.elements.feedbackType.value;
 
   if (message.length < 5) {
     feedbackMessage.setAttribute("aria-invalid", "true");
-    setFeedbackStatus("Write at least 5 characters so we know what you mean.", "error");
+    setFeedbackStatus("Please write a few words before submitting.", "error");
     feedbackMessage.focus();
     return;
   }
@@ -766,15 +859,15 @@ feedbackForm?.addEventListener("submit", async event => {
     return;
   }
 
-  const entry = { type, message, name: name || null };
+  const entry = { message };
 
   sendFeedbackBtn.disabled = true;
-  setFeedbackStatus("Sending… the server may take a moment to wake up.");
+  setFeedbackStatus("Submitting… the server may take a moment to wake up.");
 
   try {
     await postFeedback(entry);
-    setFeedbackStatus("Thanks! Your message was sent.", "ok");
-    showToast("Message sent. Thank you!");
+    setFeedbackStatus("Thank you! Your comment or suggestion was submitted successfully.", "ok");
+    showToast("Submitted. Thank you!");
   } catch (error) {
     console.error("Feedback send failed:", error);
     writeFeedbackQueue([...readFeedbackQueue(), entry]);
@@ -819,3 +912,4 @@ function restorePreferences() {
 
 restorePreferences();
 startGame();
+syncHistory({ quiet: true });   // upload any results left over from a previous visit
