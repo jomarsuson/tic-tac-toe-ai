@@ -23,7 +23,7 @@ body {
   transition: background .25s ease, color .25s ease;
 }
 
-button, input { font: inherit; }
+button, input, textarea { font: inherit; }
 button { -webkit-tap-highlight-color: transparent; }
 button:focus-visible, input:focus-visible {
   outline: 3px solid var(--accent);
